@@ -706,10 +706,33 @@ const Calendar = () => {
     if (originalEndDate === currentEndDate) return;
 
     try {
-      // Update booking in database
+      // Calculate new total amount based on the new dates
+      const checkInDate = parseISO(booking.check_in_date);
+      const newCheckOutDate = parseISO(currentEndDate);
+      const interval = eachDayOfInterval({ start: checkInDate, end: addDays(newCheckOutDate, -1) });
+
+      // Find room ID for price lookup
+      const roomId = booking.room_id;
+      const room = rooms.find(r => r.id === roomId);
+      const basePrice = room?.price_per_night || 0;
+
+      // Calculate total with daily rates
+      let newTotal = 0;
+      interval.forEach(date => {
+        const rate = getDailyRate(roomId, date);
+        newTotal += parseFloat(rate || basePrice);
+      });
+
+      const previousTotal = parseFloat(booking.total_amount || 0);
+      const difference = newTotal - previousTotal;
+
+      // Update booking in database with new checkout and total
       const { error } = await supabase
         .from('bookings')
-        .update({ check_out_date: currentEndDate })
+        .update({
+          check_out_date: currentEndDate,
+          total_amount: newTotal.toFixed(2)
+        })
         .eq('id', booking.id);
 
       if (error) throw error;
@@ -717,11 +740,26 @@ const Calendar = () => {
       // Refresh data
       fetchData();
 
+      // Show alert with price difference info
+      const paidAmount = parseFloat(booking.paid_amount || 0);
+      const newBalance = newTotal - paidAmount;
+
+      let message = `Check-out alterado para ${format(newCheckOutDate, 'dd/MM/yyyy')}\n`;
+      message += `Novo total: R$ ${newTotal.toFixed(2)}`;
+      if (difference > 0) {
+        message += ` (+R$ ${difference.toFixed(2)})`;
+      } else if (difference < 0) {
+        message += ` (-R$ ${Math.abs(difference).toFixed(2)})`;
+      }
+      if (newBalance > 0) {
+        message += `\nSaldo pendente: R$ ${newBalance.toFixed(2)}`;
+      }
+
       setAlertModal({
         isOpen: true,
         title: 'Reserva Atualizada',
-        message: `Check-out alterado para ${format(parseISO(currentEndDate), 'dd/MM/yyyy')}`,
-        type: 'success'
+        message: message,
+        type: newBalance > 0 ? 'warning' : 'success'
       });
     } catch (error) {
       setAlertModal({
