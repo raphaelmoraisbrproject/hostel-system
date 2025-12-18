@@ -725,14 +725,32 @@ const Calendar = () => {
 
       const previousTotal = parseFloat(booking.total_amount || 0);
       const difference = newTotal - previousTotal;
+      const paidAmount = parseFloat(booking.paid_amount || 0);
 
-      // Update booking in database with new checkout and total
+      // Check if paid amount exceeds new total (constraint: paid_amount <= total_amount)
+      // If reducing days and already paid more than new total, we need to adjust paid_amount
+      let adjustedPaidAmount = paidAmount;
+      let refundDue = 0;
+
+      if (paidAmount > newTotal) {
+        refundDue = paidAmount - newTotal;
+        adjustedPaidAmount = newTotal; // Cap at total to satisfy constraint
+      }
+
+      // Update booking in database with new checkout, total, and adjusted paid amount
+      const updateData = {
+        check_out_date: currentEndDate,
+        total_amount: newTotal.toFixed(2)
+      };
+
+      // Only update paid_amount if it needed adjustment
+      if (refundDue > 0) {
+        updateData.paid_amount = adjustedPaidAmount.toFixed(2);
+      }
+
       const { error } = await supabase
         .from('bookings')
-        .update({
-          check_out_date: currentEndDate,
-          total_amount: newTotal.toFixed(2)
-        })
+        .update(updateData)
         .eq('id', booking.id);
 
       if (error) throw error;
@@ -741,8 +759,7 @@ const Calendar = () => {
       fetchData();
 
       // Show alert with price difference info
-      const paidAmount = parseFloat(booking.paid_amount || 0);
-      const newBalance = newTotal - paidAmount;
+      const newBalance = newTotal - adjustedPaidAmount;
 
       let message = `Check-out alterado para ${format(newCheckOutDate, 'dd/MM/yyyy')}\n`;
       message += `Novo total: R$ ${newTotal.toFixed(2)}`;
@@ -751,15 +768,24 @@ const Calendar = () => {
       } else if (difference < 0) {
         message += ` (-R$ ${Math.abs(difference).toFixed(2)})`;
       }
-      if (newBalance > 0) {
+      if (refundDue > 0) {
+        message += `\n⚠️ Reembolso devido: R$ ${refundDue.toFixed(2)}`;
+      } else if (newBalance > 0) {
         message += `\nSaldo pendente: R$ ${newBalance.toFixed(2)}`;
+      }
+
+      let alertType = 'success';
+      if (refundDue > 0) {
+        alertType = 'warning';
+      } else if (newBalance > 0) {
+        alertType = 'warning';
       }
 
       setAlertModal({
         isOpen: true,
         title: 'Reserva Atualizada',
         message: message,
-        type: newBalance > 0 ? 'warning' : 'success'
+        type: alertType
       });
     } catch (error) {
       setAlertModal({
