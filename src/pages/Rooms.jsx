@@ -15,15 +15,16 @@ import {
     Wrench,
     CheckCircle,
     XCircle,
-    Crown
+    Crown,
+    Bath
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ConfirmationModal from '../components/ConfirmationModal';
 
 const ROOM_TYPES = [
-    { value: 'Dorm', label: 'Dormitório', icon: Users, color: 'blue', description: 'Quarto compartilhado - reserva por cama' },
-    { value: 'Private', label: 'Privativo', icon: User, color: 'purple', description: 'Quarto individual para 1 pessoa' },
-    { value: 'Double', label: 'Matrimonial', icon: BedDouble, color: 'pink', description: 'Quarto com cama de casal' },
+    { value: 'Dorm', label: 'Quarto Compartilhado', icon: Users, color: 'blue', description: 'Reserva por cama individual' },
+    { value: 'Private', label: 'Individual Privado', icon: User, color: 'purple', description: 'Quarto individual para 1 pessoa' },
+    { value: 'Double', label: 'Casal', icon: BedDouble, color: 'pink', description: 'Quarto com cama de casal' },
     { value: 'Family', label: 'Familiar', icon: Home, color: 'green', description: 'Quarto para família - múltiplas camas' },
     { value: 'Suite', label: 'Suíte', icon: Crown, color: 'amber', description: 'Quarto premium com amenidades extras' },
 ];
@@ -70,6 +71,7 @@ const Rooms = () => {
         gender_restriction: 'Mixed',
         bed_type: 'Single',
         room_number: '',
+        has_bathroom: false,
         is_active: true,
     });
 
@@ -119,8 +121,8 @@ const Rooms = () => {
             description: '',
             gender_restriction: 'Mixed',
             bed_type: 'Single',
-            floor: 1,
             room_number: '',
+            has_bathroom: false,
             is_active: true,
         });
         setIsEditMode(false);
@@ -142,6 +144,7 @@ const Rooms = () => {
             gender_restriction: room.gender_restriction || 'Mixed',
             bed_type: room.bed_type || 'Single',
             room_number: room.room_number || '',
+            has_bathroom: room.has_bathroom || false,
             is_active: room.is_active !== false,
         });
         setSelectedRoom(room);
@@ -162,6 +165,7 @@ const Rooms = () => {
                 gender_restriction: formData.type === 'Dorm' ? formData.gender_restriction : null,
                 bed_type: formData.type !== 'Dorm' ? formData.bed_type : null,
                 room_number: formData.room_number || null,
+                has_bathroom: formData.has_bathroom,
                 is_active: formData.is_active,
             };
 
@@ -318,37 +322,6 @@ const Rooms = () => {
                 </button>
             </div>
 
-            {/* Filtros por tipo */}
-            <div className="flex flex-wrap gap-2">
-                <button
-                    onClick={() => setFilterType('all')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        filterType === 'all'
-                            ? 'bg-gray-900 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                >
-                    Todos ({rooms.length})
-                </button>
-                {ROOM_TYPES.map((type) => {
-                    const count = rooms.filter(r => r.type === type.value).length;
-                    const Icon = type.icon;
-                    return (
-                        <button
-                            key={type.value}
-                            onClick={() => setFilterType(type.value)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
-                                filterType === type.value
-                                    ? 'bg-gray-900 text-white'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}
-                        >
-                            <Icon size={16} />
-                            {type.label} ({count})
-                        </button>
-                    );
-                })}
-            </div>
 
             {/* Lista de Quartos */}
             {loading ? (
@@ -444,6 +417,12 @@ const Rooms = () => {
                                                 <span className="text-gray-400 text-xs">
                                                     Cama {BED_TYPES.find(b => b.value === room.bed_type)?.label || room.bed_type}
                                                 </span>
+                                            )}
+                                            {room.has_bathroom && (
+                                                <div className="flex items-center gap-1 text-blue-600">
+                                                    <Bath size={14} />
+                                                    <span className="text-xs">Banheiro</span>
+                                                </div>
                                             )}
                                         </div>
                                         <div className="font-bold text-emerald-600">
@@ -652,18 +631,33 @@ const Rooms = () => {
                                 />
                             </div>
 
-                            {/* Status Ativo */}
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="is_active"
-                                    checked={formData.is_active}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
-                                    className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                                />
-                                <label htmlFor="is_active" className="text-sm text-gray-700">
-                                    Quarto ativo e disponível para reservas
-                                </label>
+                            {/* Opções adicionais */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="has_bathroom"
+                                        checked={formData.has_bathroom}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, has_bathroom: e.target.checked }))}
+                                        className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                                    />
+                                    <label htmlFor="has_bathroom" className="text-sm text-gray-700 flex items-center gap-2">
+                                        <Bath size={16} className="text-blue-500" />
+                                        Possui banheiro privativo
+                                    </label>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="is_active"
+                                        checked={formData.is_active}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                                        className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                                    />
+                                    <label htmlFor="is_active" className="text-sm text-gray-700">
+                                        Quarto ativo e disponível para reservas
+                                    </label>
+                                </div>
                             </div>
 
                             {/* Botões */}
