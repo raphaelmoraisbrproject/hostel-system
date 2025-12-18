@@ -23,7 +23,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 
 const ROOM_TYPES = [
     { value: 'Dorm', label: 'Quarto Compartilhado', icon: Users, color: 'blue', description: 'Reserva por cama individual' },
-    { value: 'Private', label: 'Individual Privado', icon: User, color: 'purple', description: 'Quarto individual para 1 pessoa' },
+    { value: 'Private', label: 'Individual', icon: User, color: 'purple', description: 'Quarto individual para 1 pessoa' },
     { value: 'Double', label: 'Casal', icon: BedDouble, color: 'pink', description: 'Quarto com cama de casal' },
     { value: 'Family', label: 'Familiar', icon: Home, color: 'green', description: 'Quarto para família - múltiplas camas' },
     { value: 'Suite', label: 'Suíte', icon: Crown, color: 'amber', description: 'Quarto premium com amenidades extras' },
@@ -92,7 +92,7 @@ const Rooms = () => {
             const { data: bedsData, error: bedsError } = await supabase
                 .from('beds')
                 .select('*')
-                .is('deleted_at', null);
+                .eq('status', 'Active');
 
             if (bedsError) throw bedsError;
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, differenceInDays, startOfMonth, endOfMonth, startOfDay } from 'date-fns';
-import { ChevronLeft, ChevronRight, Filter, Plus, Calendar as CalendarIcon, Bed, User, Check, X, Mail, AlertCircle, Phone } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Bed, User, Check, X, Mail, AlertCircle, Phone, ShowerHead } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AlertModal from '../components/AlertModal';
 import { COUNTRIES, DOCUMENT_TYPES, GENDERS } from '../constants/countries';
@@ -65,6 +65,23 @@ const Calendar = () => {
     title: '',
     message: '',
     type: 'success'
+  });
+
+  // Date Selection State (for click-to-select booking dates)
+  const [dateSelection, setDateSelection] = useState({
+    isSelecting: false,
+    startDate: null,
+    endDate: null,
+    rowId: null,
+    rowType: null
+  });
+
+  // Drag to extend booking state
+  const [dragState, setDragState] = useState({
+    isDragging: false,
+    booking: null,
+    originalEndDate: null,
+    currentEndDate: null
   });
 
   // Generate dates for the view (3 months = ~90 days)
@@ -221,17 +238,26 @@ const Calendar = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Rooms and Beds
+      // 1. Fetch Rooms and Beds (only active rooms)
       const { data: roomsData, error: roomsError } = await supabase
         .from('rooms')
         .select(`
           *,
           beds (*)
         `)
+        .eq('is_active', true)
+        .is('deleted_at', null)
         .order('name');
 
       if (roomsError) throw roomsError;
-      setRooms(roomsData || []);
+
+      // Filter out inactive beds (status !== 'Active')
+      const roomsWithActiveBeds = (roomsData || []).map(room => ({
+        ...room,
+        beds: room.beds?.filter(bed => bed.status === 'Active') || []
+      }));
+
+      setRooms(roomsWithActiveBeds);
 
       // 2. Fetch Bookings for the date range (90 days)
       const rangeStart = format(startDate, 'yyyy-MM-dd');
@@ -282,14 +308,25 @@ const Calendar = () => {
   // Prepare rows for the calendar (Rooms and Beds)
   const rows = [];
   (rooms || []).forEach(room => {
+    // Build room display name with gender and bathroom info
+    let roomDisplayName = room.name;
+    // Add gender tag: (F) for Female, (M) for Male, nothing for Mixed
+    if (room.gender_restriction === 'Female') {
+      roomDisplayName = `${room.name} (F)`;
+    } else if (room.gender_restriction === 'Male') {
+      roomDisplayName = `${room.name} (M)`;
+    }
+    // Bathroom icon will be shown separately in the row
+
     // Add Room Header (Price only, no bookings)
     rows.push({
       id: room.id,
-      name: room.name,
+      name: roomDisplayName,
       type: 'room',
       capacity: room.capacity,
       isPrivate: room.type === 'Private',
-      room_id: room.id // for pricing lookups
+      room_id: room.id, // for pricing lookups
+      has_bathroom: room.has_bathroom
     });
 
     // If Private, add a Row for the actual booking
@@ -528,6 +565,182 @@ const Calendar = () => {
     });
     setConflictWarning(null);
     setIsModalOpen(true);
+  };
+
+  // Handle cell click for date selection
+  const handleCellClick = (row, date) => {
+    // Only allow selection on bed or room_booking rows (not room headers)
+    if (row.type !== 'bed' && row.type !== 'room_booking') return;
+
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const resourceId = row.type === 'bed' ? row.id : row.parentId;
+
+    if (!dateSelection.isSelecting) {
+      // First click - start selection
+      setDateSelection({
+        isSelecting: true,
+        startDate: dateStr,
+        endDate: null,
+        rowId: resourceId,
+        rowType: row.type
+      });
+    } else {
+      // Second click - complete selection
+      if (dateSelection.rowId !== resourceId) {
+        // Different row clicked, reset and start new selection
+        setDateSelection({
+          isSelecting: true,
+          startDate: dateStr,
+          endDate: null,
+          rowId: resourceId,
+          rowType: row.type
+        });
+        return;
+      }
+
+      // Same row - complete selection
+      let checkIn = dateSelection.startDate;
+      let checkOut = dateStr;
+
+      // Ensure check_in is before check_out
+      if (parseISO(checkIn) > parseISO(checkOut)) {
+        [checkIn, checkOut] = [checkOut, checkIn];
+      }
+
+      // Add one day to checkout (checkout is the day they leave)
+      checkOut = format(addDays(parseISO(checkOut), 1), 'yyyy-MM-dd');
+
+      // Reset selection state
+      setDateSelection({
+        isSelecting: false,
+        startDate: null,
+        endDate: null,
+        rowId: null,
+        rowType: null
+      });
+
+      // Open booking modal with pre-filled dates
+      setSelectedBooking(null);
+      setFormData({
+        guest_id: null,
+        guest_name: '',
+        email: '',
+        phone: '',
+        nationality: '',
+        passport: '',
+        document_type: 'PASSPORT',
+        gender: '',
+        date_of_birth: '',
+        emergency_contact_name: '',
+        emergency_contact_phone: '',
+        guest_notes: '',
+        check_in: checkIn,
+        check_out: checkOut,
+        room_id: resourceId,
+        status: 'Confirmed',
+        total_amount: '',
+        paid_amount: 0,
+        initial_payment: '',
+        payment_method: 'Cash'
+      });
+      setConflictWarning(null);
+      setIsModalOpen(true);
+    }
+  };
+
+  // Check if a cell is in the current selection range
+  const isCellInSelection = (row, date) => {
+    if (!dateSelection.isSelecting || !dateSelection.startDate) return false;
+
+    const resourceId = row.type === 'bed' ? row.id : row.parentId;
+    if (dateSelection.rowId !== resourceId) return false;
+
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return dateStr === dateSelection.startDate;
+  };
+
+  // Handle drag start on booking (right edge)
+  const handleDragStart = (e, booking) => {
+    e.stopPropagation();
+    setDragState({
+      isDragging: true,
+      booking: booking,
+      originalEndDate: booking.check_out_date,
+      currentEndDate: booking.check_out_date
+    });
+  };
+
+  // Handle drag over cell
+  const handleDragOver = (e, date) => {
+    e.preventDefault();
+    if (!dragState.isDragging) return;
+
+    const newEndDate = format(addDays(date, 1), 'yyyy-MM-dd');
+    const checkIn = parseISO(dragState.booking.check_in_date);
+
+    // Don't allow end date before or equal to start date
+    if (parseISO(newEndDate) <= checkIn) return;
+
+    setDragState(prev => ({
+      ...prev,
+      currentEndDate: newEndDate
+    }));
+  };
+
+  // Handle drop - update booking
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    if (!dragState.isDragging || !dragState.booking) return;
+
+    const { booking, originalEndDate, currentEndDate } = dragState;
+
+    // Reset drag state
+    setDragState({
+      isDragging: false,
+      booking: null,
+      originalEndDate: null,
+      currentEndDate: null
+    });
+
+    // If no change, do nothing
+    if (originalEndDate === currentEndDate) return;
+
+    try {
+      // Update booking in database
+      const { error } = await supabase
+        .from('bookings')
+        .update({ check_out_date: currentEndDate })
+        .eq('id', booking.id);
+
+      if (error) throw error;
+
+      // Refresh data
+      fetchData();
+
+      setAlertModal({
+        isOpen: true,
+        title: 'Reserva Atualizada',
+        message: `Check-out alterado para ${format(parseISO(currentEndDate), 'dd/MM/yyyy')}`,
+        type: 'success'
+      });
+    } catch (error) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Não foi possível atualizar a reserva',
+        type: 'error'
+      });
+    }
+  };
+
+  // Cancel drag on mouse up outside valid drop zone
+  const handleDragEnd = () => {
+    setDragState({
+      isDragging: false,
+      booking: null,
+      originalEndDate: null,
+      currentEndDate: null
+    });
   };
 
   const handleSaveBooking = async (e) => {
@@ -775,10 +988,7 @@ const Calendar = () => {
               style={{ width: SIDEBAR_WIDTH }}
             >
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rooms & Beds</span>
-              <div className="flex items-center justify-between mt-1">
-                <span className="font-bold text-gray-800 text-lg">All Rooms</span>
-                <Filter size={16} className="text-gray-400 cursor-pointer hover:text-emerald-600" />
-              </div>
+              <span className="font-bold text-gray-800 text-lg mt-1">All Rooms</span>
             </div>
             <div className="flex">
               {dates.map(date => {
@@ -824,8 +1034,11 @@ const Calendar = () => {
                     {row.type === 'room' && (
                       <>
                         <div className="w-1 h-8 bg-purple-500 rounded-full"></div>
-                        <div>
-                          <div className="font-bold text-gray-800 text-sm truncate">{row.name}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-gray-800 text-sm truncate">{row.name}</span>
+                            {row.has_bathroom && <ShowerHead size={14} className="text-blue-500 flex-shrink-0" />}
+                          </div>
                           <div className="text-[10px] text-gray-400 font-medium uppercase tracking-tighter">Manage Prices</div>
                         </div>
                       </>
@@ -850,19 +1063,34 @@ const Calendar = () => {
                 </div>
 
                 {/* Timeline Cells */}
-                <div className="flex relative">
+                <div className="flex relative" onDragEnd={handleDragEnd}>
                   {dates.map(date => {
                     const roomId = row.type === 'room' ? row.id : row.parentId;
                     const rate = roomId ? getDailyRate(roomId, date) : null;
                     const isRoomHeader = row.type === 'room';
                     const isToday = isSameDay(date, today);
+                    const isSelected = isCellInSelection(row, date);
+                    const isClickable = row.type === 'bed' || row.type === 'room_booking';
 
                     return (
                       <div
                         key={date.toString()}
-                        className={`flex-shrink-0 border-r h-full flex items-center justify-center transition-all ${isRoomHeader ? 'hover:bg-emerald-50 cursor-pointer' : ''} ${isToday ? 'bg-emerald-50 border-emerald-200' : 'border-gray-300'}`}
+                        className={`flex-shrink-0 border-r h-full flex items-center justify-center transition-all
+                          ${isRoomHeader ? 'hover:bg-emerald-50 cursor-pointer' : ''}
+                          ${isClickable ? 'hover:bg-blue-50 cursor-pointer' : ''}
+                          ${isToday ? 'bg-emerald-50 border-emerald-200' : 'border-gray-300'}
+                          ${isSelected ? 'bg-blue-200 ring-2 ring-blue-400 ring-inset' : ''}
+                        `}
                         style={{ width: CELL_WIDTH }}
-                        onClick={() => isRoomHeader && handlePriceEdit(row, date, rate)}
+                        onClick={() => {
+                          if (isRoomHeader) {
+                            handlePriceEdit(row, date, rate);
+                          } else if (isClickable) {
+                            handleCellClick(row, date);
+                          }
+                        }}
+                        onDragOver={(e) => handleDragOver(e, date)}
+                        onDrop={handleDrop}
                       >
                         {isRoomHeader && (
                           <span className="text-[11px] font-bold text-emerald-700">
@@ -908,7 +1136,7 @@ const Calendar = () => {
                         {/* Inner bar with clip-path */}
                         <div
                           style={{ clipPath }}
-                          className={`h-full w-full ${getStatusColor(booking.status)} transition-all group-hover:brightness-110`}
+                          className={`h-full w-full ${getStatusColor(booking.status)} transition-all group-hover:brightness-110 relative`}
                         >
                           <div className={`h-full w-full flex items-center gap-1 relative ${paddingLeft} ${paddingRight}`}>
                             <span className="font-bold text-xs text-white truncate drop-shadow-md">
@@ -925,6 +1153,19 @@ const Calendar = () => {
                               )}
                             </div>
                           </div>
+
+                          {/* Drag handle on right edge to extend booking */}
+                          {!isClippedRight && (
+                            <div
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, booking)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute right-0 top-0 bottom-0 w-6 cursor-ew-resize hover:bg-white/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Arrastar para estender"
+                            >
+                              <div className="w-1 h-6 bg-white/50 rounded-full"></div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
