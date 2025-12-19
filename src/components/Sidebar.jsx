@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, BedDouble, Wallet, Settings, LogOut, Calendar as CalendarIcon } from 'lucide-react';
+import { LayoutDashboard, Users, BedDouble, Wallet, Settings, LogOut, Calendar as CalendarIcon, ClipboardList } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -11,6 +11,7 @@ const Sidebar = () => {
     const navItems = [
         { icon: LayoutDashboard, label: 'dashboard', path: '/' },
         { icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
+        { icon: ClipboardList, label: 'Reservas', path: '/bookings' },
         { icon: BedDouble, label: 'rooms', path: '/rooms' },
         { icon: Users, label: 'guests', path: '/guests' },
         { icon: Wallet, label: 'finance', path: '/finance' },

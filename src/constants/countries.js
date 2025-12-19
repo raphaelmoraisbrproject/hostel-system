@@ -1,7 +1,8 @@
-// ISO 3166-1 Country List - Sorted alphabetically
+// ISO 3166-1 Country List - Brazil first, then sorted alphabetically
 // Format: { code: 'XX', name: 'Country Name' }
 
 export const COUNTRIES = [
+  { code: 'BR', name: 'Brasil' },
   { code: 'AF', name: 'Afghanistan' },
   { code: 'AL', name: 'Albania' },
   { code: 'DZ', name: 'Algeria' },
@@ -25,7 +26,6 @@ export const COUNTRIES = [
   { code: 'BO', name: 'Bolivia' },
   { code: 'BA', name: 'Bosnia and Herzegovina' },
   { code: 'BW', name: 'Botswana' },
-  { code: 'BR', name: 'Brazil' },
   { code: 'BN', name: 'Brunei' },
   { code: 'BG', name: 'Bulgaria' },
   { code: 'BF', name: 'Burkina Faso' },
@@ -202,19 +202,19 @@ export const COUNTRIES = [
 
 // Document types for ID verification
 export const DOCUMENT_TYPES = [
-  { code: 'PASSPORT', name: 'Passport' },
-  { code: 'NATIONAL_ID', name: 'National ID' },
-  { code: 'DRIVERS_LICENSE', name: "Driver's License" },
-  { code: 'RESIDENCE_PERMIT', name: 'Residence Permit' },
-  { code: 'OTHER', name: 'Other' }
+  { code: 'CPF', name: 'CPF' },
+  { code: 'RG', name: 'RG' },
+  { code: 'PASSPORT', name: 'Passaporte' },
+  { code: 'CNH', name: 'CNH' },
+  { code: 'OTHER', name: 'Outro' }
 ];
 
 // Gender options
 export const GENDERS = [
-  { code: 'M', name: 'Male' },
-  { code: 'F', name: 'Female' },
-  { code: 'O', name: 'Other' },
-  { code: 'N', name: 'Prefer not to say' }
+  { code: 'M', name: 'Masculino' },
+  { code: 'F', name: 'Feminino' },
+  { code: 'O', name: 'Outro' },
+  { code: 'N', name: 'Prefiro não dizer' }
 ];
 
 export default COUNTRIES;

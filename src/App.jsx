@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Rooms from './pages/Rooms';
 import Calendar from './pages/Calendar';
+import Bookings from './pages/Bookings';
 import Guests from './pages/Guests';
 import Finance from './pages/Finance';
 import './i18n';
@@ -27,6 +28,11 @@ function App() {
           <Route path="/calendar" element={
             <ProtectedRoute>
               <Layout><Calendar /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/bookings" element={
+            <ProtectedRoute>
+              <Layout><Bookings /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/rooms" element={

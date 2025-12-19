@@ -1,20 +1,104 @@
-import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, differenceInDays, startOfMonth, endOfMonth, startOfDay } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Bed, User, Check, X, Mail, AlertCircle, Phone, ShowerHead } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Bed, User, Check, X, Mail, AlertCircle, Phone, ShowerHead, Lock } from 'lucide-react';
+import Select from 'react-select';
 import { supabase } from '../lib/supabase';
 import AlertModal from '../components/AlertModal';
 import { COUNTRIES, DOCUMENT_TYPES, GENDERS } from '../constants/countries';
 
-const CELL_WIDTH = 120; // Width of each day column
+// Convert countries to react-select format with popular countries first
+const POPULAR_COUNTRIES = ['BR', 'AR', 'US', 'PT', 'ES', 'FR', 'DE', 'GB', 'IT', 'CL', 'CO', 'MX', 'UY', 'PY'];
+const countryOptions = [
+  {
+    label: 'Mais comuns',
+    options: COUNTRIES
+      .filter(c => POPULAR_COUNTRIES.includes(c.code))
+      .sort((a, b) => POPULAR_COUNTRIES.indexOf(a.code) - POPULAR_COUNTRIES.indexOf(b.code))
+      .map(c => ({ value: c.name, label: c.name }))
+  },
+  {
+    label: 'Todos os países',
+    options: COUNTRIES.map(c => ({ value: c.name, label: c.name }))
+  }
+];
+
+// Custom styles for react-select to match the design
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    backgroundColor: 'rgb(249, 250, 251)',
+    borderColor: state.isFocused ? 'rgb(16, 185, 129)' : 'rgb(229, 231, 235)',
+    borderRadius: '0.5rem',
+    padding: '0',
+    minHeight: '38px',
+    boxShadow: state.isFocused ? '0 0 0 2px rgba(16, 185, 129, 0.2)' : 'none',
+    '&:hover': { borderColor: 'rgb(16, 185, 129)' }
+  }),
+  menu: (base) => ({
+    ...base,
+    borderRadius: '0.5rem',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+    zIndex: 50
+  }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isSelected ? 'rgb(16, 185, 129)' : state.isFocused ? 'rgb(236, 253, 245)' : 'white',
+    color: state.isSelected ? 'white' : 'rgb(17, 24, 39)',
+    fontSize: '0.875rem',
+    padding: '8px 12px',
+    cursor: 'pointer'
+  }),
+  groupHeading: (base) => ({
+    ...base,
+    fontSize: '0.65rem',
+    fontWeight: 700,
+    color: 'rgb(156, 163, 175)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    padding: '8px 12px 4px'
+  }),
+  singleValue: (base) => ({
+    ...base,
+    fontSize: '0.875rem',
+    color: 'rgb(17, 24, 39)'
+  }),
+  placeholder: (base) => ({
+    ...base,
+    fontSize: '0.875rem',
+    color: 'rgb(209, 213, 219)'
+  }),
+  input: (base) => ({
+    ...base,
+    fontSize: '0.875rem'
+  })
+};
+
+// Responsive dimensions - will be used with CSS variables
+const CELL_WIDTH = 120; // Width of each day column (desktop)
+const CELL_WIDTH_MOBILE = 80; // Width of each day column (mobile)
 const HEADER_HEIGHT = 96; // Height of the date header
-const SIDEBAR_WIDTH = 240; // Width of the room sidebar
+const HEADER_HEIGHT_MOBILE = 72; // Height of the date header (mobile)
+const SIDEBAR_WIDTH = 240; // Width of the room sidebar (desktop)
+const SIDEBAR_WIDTH_MOBILE = 140; // Width of the room sidebar (mobile)
 
 const Calendar = () => {
-  const { t } = useTranslation();
   const [today] = useState(new Date());
   // Start 2 days before today to show recent bookings
   const [startDate, setStartDate] = useState(addDays(today, -2));
+
+  // Responsive dimensions
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const cellWidth = isMobile ? CELL_WIDTH_MOBILE : CELL_WIDTH;
+  const headerHeight = isMobile ? HEADER_HEIGHT_MOBILE : HEADER_HEIGHT;
+  const sidebarWidth = isMobile ? SIDEBAR_WIDTH_MOBILE : SIDEBAR_WIDTH;
   const [rooms, setRooms] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [guests, setGuests] = useState([]);
@@ -46,10 +130,16 @@ const Calendar = () => {
     total_amount: '',
     paid_amount: 0,
     initial_payment: '',
-    payment_method: 'Cash'
+    payment_method: 'Cash',
+    booking_notes: ''
   });
 
   const [conflictWarning, setConflictWarning] = useState(null);
+
+  // Booking context - tracks which room/bed was clicked on calendar
+  // null = new booking from button (show all rooms)
+  // { roomId, roomType } = clicked from calendar (filter options)
+  const [bookingContext, setBookingContext] = useState(null);
 
   // Price Edit Modal State
   const [priceModal, setPriceModal] = useState({
@@ -76,12 +166,43 @@ const Calendar = () => {
     rowType: null
   });
 
+  // Action popup after selecting dates
+  const [actionPopup, setActionPopup] = useState({
+    isOpen: false,
+    x: 0,
+    y: 0,
+    checkIn: null,
+    checkOut: null,
+    resourceId: null,
+    resourceType: null,
+    roomId: null
+  });
+
   // Drag to extend booking state
   const [dragState, setDragState] = useState({
     isDragging: false,
     booking: null,
     originalEndDate: null,
     currentEndDate: null
+  });
+
+  // Cancel confirmation modal
+  const [cancelConfirm, setCancelConfirm] = useState({
+    isOpen: false,
+    booking: null
+  });
+
+  // Date Locks state
+  const [dateLocks, setDateLocks] = useState([]);
+  const [lockModal, setLockModal] = useState({
+    isOpen: false,
+    lock: null, // null = new, object = editing
+    roomId: null,
+    bedId: null,
+    startDate: '',
+    endDate: '',
+    lockType: 'Voluntariado',
+    description: ''
   });
 
   // Generate dates for the view (3 months = ~90 days)
@@ -98,7 +219,10 @@ const Calendar = () => {
   useEffect(() => {
     if (isModalOpen) {
       checkConflicts();
-      calculateTotal();
+      // Only calculate total for NEW bookings, not when editing existing ones
+      if (!selectedBooking) {
+        calculateTotal();
+      }
     }
   }, [formData.check_in, formData.check_out, formData.room_id, isModalOpen]);
 
@@ -138,6 +262,42 @@ const Calendar = () => {
       return () => clearTimeout(timer);
     }
   }, [formData.passport, formData.email, isModalOpen]);
+
+  // Close modals on ESC key
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        if (cancelConfirm.isOpen) {
+          setCancelConfirm({ isOpen: false, booking: null });
+        } else if (actionPopup.isOpen) {
+          setActionPopup({ ...actionPopup, isOpen: false });
+        } else if (lockModal.isOpen) {
+          setLockModal({ ...lockModal, isOpen: false });
+        } else if (priceModal.isOpen) {
+          setPriceModal({ ...priceModal, isOpen: false });
+        } else if (isModalOpen) {
+          setIsModalOpen(false);
+        } else if (alertModal.isOpen) {
+          setAlertModal({ ...alertModal, isOpen: false });
+        } else if (dateSelection.isSelecting) {
+          setDateSelection({ isSelecting: false, startDate: null, endDate: null, rowId: null, rowType: null });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isModalOpen, priceModal.isOpen, alertModal.isOpen, actionPopup.isOpen, lockModal.isOpen, dateSelection.isSelecting, cancelConfirm.isOpen]);
+
+  // Ref for modal content (to detect clicks outside)
+  const modalRef = useRef(null);
+
+  // Handle click outside modal
+  const handleBackdropClick = useCallback((e) => {
+    if (modalRef.current && !modalRef.current.contains(e.target)) {
+      setIsModalOpen(false);
+    }
+  }, []);
 
   const calculateTotal = () => {
     if (!formData.check_in || !formData.check_out || !formData.room_id) return;
@@ -226,10 +386,33 @@ const Calendar = () => {
     try {
       const { data } = await query;
       if (data && data.length > 0) {
-        setConflictWarning(`Overlap detected: already booked by ${data[0].guests?.full_name}`);
-      } else {
-        setConflictWarning(null);
+        setConflictWarning(`Conflito: já reservado por ${data[0].guests?.full_name}`);
+        return;
       }
+
+      // Also check for date locks
+      // For lock comparison, we need to check if booking period overlaps with lock period
+      // Lock end_date is inclusive, so add 1 day for comparison
+      let lockQuery = supabase
+        .from('date_locks')
+        .select('id, lock_type, start_date, end_date')
+        .lt('start_date', check_out)
+        .gte('end_date', check_in.substring(0, 10));
+
+      if (targetBedId) {
+        lockQuery = lockQuery.eq('bed_id', targetBedId);
+      } else {
+        lockQuery = lockQuery.eq('room_id', targetRoomId).is('bed_id', null);
+      }
+
+      const { data: lockData } = await lockQuery;
+      if (lockData && lockData.length > 0) {
+        const lockTypeLabel = lockData[0].lock_type === 'Outro' ? 'Bloqueado' : lockData[0].lock_type;
+        setConflictWarning(`Conflito: período bloqueado (${lockTypeLabel})`);
+        return;
+      }
+
+      setConflictWarning(null);
     } catch (e) {
       console.error("Conflict check error:", e);
     }
@@ -298,10 +481,154 @@ const Calendar = () => {
       if (ratesError) throw ratesError;
       setDailyRates(ratesData || []);
 
+      // 4. Fetch Date Locks
+      const { data: locksData, error: locksError } = await supabase
+        .from('date_locks')
+        .select('*')
+        .lt('start_date', rangeEnd)
+        .gt('end_date', rangeStart);
+
+      if (locksError) throw locksError;
+      setDateLocks(locksData || []);
+
     } catch (error) {
       console.error('Error fetching calendar data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Save date lock
+  const handleSaveLock = async () => {
+    try {
+      const { startDate, endDate, roomId, bedId } = lockModal;
+
+      // Check for conflicts with existing bookings
+      // Lock end_date is inclusive, so we need to add 1 day for comparison
+      const lockEndForComparison = format(addDays(parseISO(endDate), 1), 'yyyy-MM-dd');
+
+      let conflictQuery = supabase
+        .from('bookings')
+        .select('id, guests(full_name)')
+        .neq('status', 'Cancelled')
+        .lt('check_in_date', lockEndForComparison)
+        .gt('check_out_date', startDate);
+
+      if (bedId) {
+        conflictQuery = conflictQuery.eq('bed_id', bedId);
+      } else {
+        conflictQuery = conflictQuery.eq('room_id', roomId).is('bed_id', null);
+      }
+
+      const { data: conflictingBookings } = await conflictQuery;
+
+      if (conflictingBookings && conflictingBookings.length > 0) {
+        const guestName = conflictingBookings[0].guests?.full_name || 'Hóspede';
+        setAlertModal({
+          isOpen: true,
+          title: 'Conflito de Datas',
+          message: `Não é possível bloquear: já existe reserva de "${guestName}" neste período.`,
+          type: 'error'
+        });
+        return;
+      }
+
+      // Check for conflicts with existing locks (excluding current lock if editing)
+      let lockConflictQuery = supabase
+        .from('date_locks')
+        .select('id, lock_type')
+        .lt('start_date', lockEndForComparison)
+        .gte('end_date', startDate);
+
+      if (bedId) {
+        lockConflictQuery = lockConflictQuery.eq('bed_id', bedId);
+      } else {
+        lockConflictQuery = lockConflictQuery.eq('room_id', roomId).is('bed_id', null);
+      }
+
+      if (lockModal.lock) {
+        lockConflictQuery = lockConflictQuery.neq('id', lockModal.lock.id);
+      }
+
+      const { data: conflictingLocks } = await lockConflictQuery;
+
+      if (conflictingLocks && conflictingLocks.length > 0) {
+        setAlertModal({
+          isOpen: true,
+          title: 'Conflito de Datas',
+          message: `Já existe um bloqueio (${conflictingLocks[0].lock_type}) neste período.`,
+          type: 'error'
+        });
+        return;
+      }
+
+      // No conflicts, proceed with save
+      const lockData = {
+        room_id: bedId ? null : roomId,
+        bed_id: bedId || null,
+        start_date: startDate,
+        end_date: endDate,
+        lock_type: lockModal.lockType,
+        description: lockModal.lockType === 'Outro' ? lockModal.description : null
+      };
+
+      if (lockModal.lock) {
+        const { error } = await supabase
+          .from('date_locks')
+          .update(lockData)
+          .eq('id', lockModal.lock.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('date_locks')
+          .insert([lockData]);
+        if (error) throw error;
+      }
+
+      setLockModal({ ...lockModal, isOpen: false });
+      fetchData();
+      setAlertModal({
+        isOpen: true,
+        title: 'Sucesso',
+        message: 'Bloqueio salvo com sucesso',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error saving lock:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Erro ao salvar bloqueio: ' + error.message,
+        type: 'error'
+      });
+    }
+  };
+
+  // Delete date lock
+  const handleDeleteLock = async (lockId) => {
+    try {
+      const { error } = await supabase
+        .from('date_locks')
+        .delete()
+        .eq('id', lockId);
+      if (error) throw error;
+
+      setLockModal({ ...lockModal, isOpen: false });
+      fetchData();
+      setAlertModal({
+        isOpen: true,
+        title: 'Sucesso',
+        message: 'Bloqueio removido',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting lock:', error);
+      setAlertModal({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Erro ao remover bloqueio',
+        type: 'error'
+      });
     }
   };
 
@@ -358,6 +685,9 @@ const Calendar = () => {
 
   const getResourceBookings = (row, type) => {
     return bookings.filter(b => {
+      // Hide cancelled bookings from calendar
+      if (b.status === 'Cancelled') return false;
+
       // Room Header rows (type 'room') never show bookings
       if (type === 'room') return false;
 
@@ -369,6 +699,65 @@ const Calendar = () => {
 
       return false;
     });
+  };
+
+  const getResourceLocks = (row, type) => {
+    return dateLocks.filter(lock => {
+      // Room Header rows (type 'room') never show locks
+      if (type === 'room') return false;
+
+      // Bed rows show locks linked to that bed
+      if (type === 'bed') return lock.bed_id === row.id;
+
+      // room_booking rows show locks linked to the room (without a specific bed)
+      if (type === 'room_booking') return lock.room_id === row.parentId && !lock.bed_id;
+
+      return false;
+    });
+  };
+
+  const getLockBarStyle = (lock) => {
+    const start = parseISO(lock.start_date);
+    const end = addDays(parseISO(lock.end_date), 1); // end_date is inclusive
+
+    const visibleRangeStart = startOfDay(startDate);
+    const visibleRangeEnd = addDays(startDate, dates.length);
+
+    const offsetDays = differenceInDays(startOfDay(start), visibleRangeStart);
+    const durationDays = differenceInDays(end, start);
+
+    const isClippedLeft = startOfDay(start) < visibleRangeStart;
+    const isClippedRight = end > visibleRangeEnd;
+
+    const visibleStartDays = isClippedLeft ? 0 : offsetDays;
+    const clippedDaysStart = isClippedLeft ? Math.abs(offsetDays) : 0;
+    const endOffsetDays = offsetDays + durationDays;
+    const clippedDaysEnd = isClippedRight ? Math.max(0, endOffsetDays - dates.length) : 0;
+    const visibleDurationDays = durationDays - clippedDaysStart - clippedDaysEnd;
+
+    if (visibleDurationDays <= 0) {
+      return { display: 'none' };
+    }
+
+    const leftPosition = isClippedLeft ? 0 : (visibleStartDays * cellWidth);
+    let width = visibleDurationDays * cellWidth;
+
+    return {
+      left: `${leftPosition}px`,
+      width: `${width}px`,
+      position: 'absolute',
+      top: isMobile ? '8px' : '12px',
+      bottom: isMobile ? '8px' : '12px',
+      zIndex: 1
+    };
+  };
+
+  const getLockColor = (lockType) => {
+    switch (lockType) {
+      case 'Voluntariado': return 'bg-purple-500 hover:bg-purple-600 border-purple-600';
+      case 'Manutenção': return 'bg-orange-500 hover:bg-orange-600 border-orange-600';
+      default: return 'bg-gray-500 hover:bg-gray-600 border-gray-600';
+    }
   };
 
   const getBarStyle = (booking) => {
@@ -403,15 +792,15 @@ const Calendar = () => {
     // Clipped left: starts at left edge (0)
     const leftPosition = isClippedLeft
       ? 0
-      : (visibleStartDays * CELL_WIDTH) + (CELL_WIDTH / 2);
+      : (visibleStartDays * cellWidth) + (cellWidth / 2);
 
     // Calculate width
     // Normal: spans durationDays cells
-    // Clipped left: add CELL_WIDTH/2 since we start at edge, not middle
-    // Clipped right: add CELL_WIDTH/2 since we end at edge, not middle
-    let width = visibleDurationDays * CELL_WIDTH;
-    if (isClippedLeft) width += CELL_WIDTH / 2;
-    if (isClippedRight) width += CELL_WIDTH / 2;
+    // Clipped left: add cellWidth/2 since we start at edge, not middle
+    // Clipped right: add cellWidth/2 since we end at edge, not middle
+    let width = visibleDurationDays * cellWidth;
+    if (isClippedLeft) width += cellWidth / 2;
+    if (isClippedRight) width += cellWidth / 2;
 
     // Adjust clip-path based on clipping
     // Normal: / / (slanted both sides)
@@ -429,13 +818,16 @@ const Calendar = () => {
       clipPath = 'polygon(25px 0, 100% 0, calc(100% - 25px) 100%, 0 100%)'; // Normal
     }
 
+    // Responsive vertical positioning (row is h-12/48px on mobile, h-16/64px on desktop)
+    const verticalPadding = isMobile ? '8px' : '12px';
+
     return {
       left: `${leftPosition}px`,
       width: `${width}px`,
       position: 'absolute',
-      top: '12px',
-      bottom: '12px',
-      zIndex: 10,
+      top: verticalPadding,
+      bottom: verticalPadding,
+      zIndex: 1,
       clipPath,
       isClippedLeft,
       isClippedRight
@@ -444,11 +836,11 @@ const Calendar = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Confirmed': return 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600 text-white'; // Reserved
-      case 'Checked-in': return 'bg-blue-500 hover:bg-blue-600 border-blue-600 text-white';
-      case 'Checked-out': return 'bg-gray-400 hover:bg-gray-500 border-gray-500 text-white';
-      case 'Cancelled': return 'bg-red-400 hover:bg-red-500 border-red-500 text-white';
-      default: return 'bg-emerald-500 text-white';
+      case 'Confirmed': return 'bg-blue-500 hover:bg-blue-600 border-blue-600 text-white'; // Reservado
+      case 'Checked-in': return 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600 text-white'; // Check-in
+      case 'Checked-out': return 'bg-gray-400 hover:bg-gray-500 border-gray-500 text-white'; // Check-out
+      case 'Cancelled': return 'bg-red-400 hover:bg-red-500 border-red-500 text-white'; // Cancelado
+      default: return 'bg-blue-500 text-white';
     }
   };
 
@@ -492,16 +884,16 @@ const Calendar = () => {
 
       setAlertModal({
         isOpen: true,
-        title: 'Success',
-        message: 'Price updated successfully',
+        title: 'Sucesso',
+        message: 'Preço atualizado com sucesso',
         type: 'success'
       });
     } catch (error) {
       console.error('Error saving daily rate:', error);
       setAlertModal({
         isOpen: true,
-        title: 'Error',
-        message: 'Could not update price',
+        title: 'Erro',
+        message: 'Não foi possível atualizar o preço',
         type: 'error'
       });
     }
@@ -509,6 +901,7 @@ const Calendar = () => {
 
   const handleBookingClick = (booking) => {
     setSelectedBooking(booking);
+    setBookingContext(null); // Allow changing room when editing existing booking
     // Populate form with all guest info
     setFormData({
       // Guest info
@@ -532,13 +925,15 @@ const Calendar = () => {
       total_amount: booking.total_amount,
       paid_amount: parseFloat(booking.paid_amount || 0),
       initial_payment: booking.paid_amount || '',
-      payment_method: 'Cash'
+      payment_method: 'Cash',
+      booking_notes: booking.notes || ''
     });
     setIsModalOpen(true);
   };
 
   const handleNewBooking = () => {
     setSelectedBooking(null);
+    setBookingContext(null); // Show all rooms when clicking "New Booking" button
     setFormData({
       // Guest info
       guest_id: null,
@@ -556,24 +951,26 @@ const Calendar = () => {
       // Booking info
       check_in: format(today, 'yyyy-MM-dd'),
       check_out: format(addDays(today, 1), 'yyyy-MM-dd'),
-      room_id: rooms[0]?.id || '',
+      room_id: '',
       status: 'Confirmed',
       total_amount: '',
       paid_amount: 0,
       initial_payment: '',
-      payment_method: 'Cash'
+      payment_method: 'Cash',
+      booking_notes: ''
     });
     setConflictWarning(null);
     setIsModalOpen(true);
   };
 
   // Handle cell click for date selection
-  const handleCellClick = (row, date) => {
+  const handleCellClick = (e, row, date) => {
     // Only allow selection on bed or room_booking rows (not room headers)
     if (row.type !== 'bed' && row.type !== 'room_booking') return;
 
     const dateStr = format(date, 'yyyy-MM-dd');
     const resourceId = row.type === 'bed' ? row.id : row.parentId;
+    const parentRoomId = row.type === 'bed' ? row.parentId : row.parentId;
 
     if (!dateSelection.isSelecting) {
       // First click - start selection
@@ -607,9 +1004,6 @@ const Calendar = () => {
         [checkIn, checkOut] = [checkOut, checkIn];
       }
 
-      // Add one day to checkout (checkout is the day they leave)
-      checkOut = format(addDays(parseISO(checkOut), 1), 'yyyy-MM-dd');
-
       // Reset selection state
       setDateSelection({
         isSelecting: false,
@@ -619,33 +1013,77 @@ const Calendar = () => {
         rowType: null
       });
 
-      // Open booking modal with pre-filled dates
-      setSelectedBooking(null);
-      setFormData({
-        guest_id: null,
-        guest_name: '',
-        email: '',
-        phone: '',
-        nationality: '',
-        passport: '',
-        document_type: 'PASSPORT',
-        gender: '',
-        date_of_birth: '',
-        emergency_contact_name: '',
-        emergency_contact_phone: '',
-        guest_notes: '',
-        check_in: checkIn,
-        check_out: checkOut,
-        room_id: resourceId,
-        status: 'Confirmed',
-        total_amount: '',
-        paid_amount: 0,
-        initial_payment: '',
-        payment_method: 'Cash'
+      // Show action popup
+      const rect = e.currentTarget.getBoundingClientRect();
+      setActionPopup({
+        isOpen: true,
+        x: rect.left + rect.width / 2,
+        y: rect.top,
+        checkIn: checkIn,
+        checkOut: format(addDays(parseISO(checkOut), 1), 'yyyy-MM-dd'), // checkout is next day
+        resourceId: resourceId,
+        resourceType: row.type,
+        roomId: parentRoomId,
+        bedId: row.type === 'bed' ? row.id : null
       });
-      setConflictWarning(null);
-      setIsModalOpen(true);
     }
+  };
+
+  // Handle action from popup - create booking
+  const handleActionBooking = () => {
+    const { checkIn, checkOut, resourceId, roomId } = actionPopup;
+    const parentRoom = rooms.find(r => r.id === roomId);
+
+    setBookingContext({
+      roomId: roomId,
+      roomType: parentRoom?.type || 'Dorm',
+      roomName: parentRoom?.name || ''
+    });
+
+    setSelectedBooking(null);
+    setFormData({
+      guest_id: null,
+      guest_name: '',
+      email: '',
+      phone: '',
+      nationality: '',
+      passport: '',
+      document_type: 'PASSPORT',
+      gender: '',
+      date_of_birth: '',
+      emergency_contact_name: '',
+      emergency_contact_phone: '',
+      guest_notes: '',
+      check_in: checkIn,
+      check_out: checkOut,
+      room_id: resourceId,
+      status: 'Confirmed',
+      total_amount: '',
+      paid_amount: 0,
+      initial_payment: '',
+      payment_method: 'Cash',
+      booking_notes: ''
+    });
+    setConflictWarning(null);
+    setActionPopup({ ...actionPopup, isOpen: false });
+    setIsModalOpen(true);
+  };
+
+  // Handle action from popup - create lock
+  const handleActionLock = () => {
+    const { checkIn, checkOut, roomId, bedId } = actionPopup;
+
+    setLockModal({
+      isOpen: true,
+      lock: null,
+      roomId: roomId,
+      bedId: bedId,
+      startDate: checkIn,
+      endDate: format(addDays(parseISO(checkOut), -1), 'yyyy-MM-dd'), // end date is inclusive
+      lockType: 'Voluntariado',
+      description: ''
+    });
+    setActionPopup({ ...actionPopup, isOpen: false });
   };
 
   // Check if a cell is in the current selection range
@@ -797,6 +1235,49 @@ const Calendar = () => {
     }
   };
 
+  // Cancel booking - show confirmation modal
+  const handleCancelBooking = () => {
+    if (!selectedBooking) return;
+    setCancelConfirm({
+      isOpen: true,
+      booking: selectedBooking
+    });
+  };
+
+  // Confirm cancel booking (soft delete)
+  const confirmCancelBooking = async () => {
+    const booking = cancelConfirm.booking;
+    if (!booking) return;
+
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'Cancelled' })
+        .eq('id', booking.id);
+
+      if (error) throw error;
+
+      setCancelConfirm({ isOpen: false, booking: null });
+      setIsModalOpen(false);
+      fetchData();
+      setAlertModal({
+        isOpen: true,
+        title: 'Reserva Cancelada',
+        message: `A reserva de ${booking.guests?.full_name || 'hóspede'} foi cancelada.`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      setCancelConfirm({ isOpen: false, booking: null });
+      setAlertModal({
+        isOpen: true,
+        title: 'Erro',
+        message: 'Não foi possível cancelar a reserva',
+        type: 'error'
+      });
+    }
+  };
+
   // Cancel drag on mouse up outside valid drop zone
   const handleDragEnd = () => {
     setDragState({
@@ -860,8 +1341,8 @@ const Calendar = () => {
       // 1. Create/Update Guest
       let guestId = formData.guest_id || selectedBooking?.guest_id;
 
-      // Prepare guest data object with all fields
-      // Note: Convert empty strings to null for optional fields
+      // Prepare guest data object with core fields only
+      // Extended fields (document_type, gender, emergency_contact, etc.) need migration
       const guestData = {
         full_name: formData.guest_name,
         email: formData.email,
@@ -870,13 +1351,13 @@ const Calendar = () => {
         passport_id: formData.passport
       };
 
-      // Only include optional fields if they have values
+      // Optional fields
+      if (formData.guest_notes) guestData.notes = formData.guest_notes;
+      if (formData.date_of_birth) guestData.date_of_birth = formData.date_of_birth;
       if (formData.document_type) guestData.document_type = formData.document_type;
       if (formData.gender) guestData.gender = formData.gender;
-      if (formData.date_of_birth) guestData.date_of_birth = formData.date_of_birth;
       if (formData.emergency_contact_name) guestData.emergency_contact_name = formData.emergency_contact_name;
       if (formData.emergency_contact_phone) guestData.emergency_contact_phone = formData.emergency_contact_phone;
-      if (formData.guest_notes) guestData.notes = formData.guest_notes;
 
       if (!guestId) {
         // Create new guest
@@ -906,7 +1387,8 @@ const Calendar = () => {
         check_out_date: formData.check_out,
         status: formData.status,
         total_amount: formData.total_amount || 0,
-        paid_amount: totalPaidValue
+        paid_amount: totalPaidValue,
+        notes: formData.booking_notes || null
       };
 
       if (isBed) {
@@ -957,7 +1439,7 @@ const Calendar = () => {
           if (totalPaidValue > 0) {
             if (existingTransaction) {
               // Update existing transaction with new total
-              await supabase
+              const { error: updateTxError } = await supabase
                 .from('transactions')
                 .update({
                   amount: totalPaidValue,
@@ -965,9 +1447,14 @@ const Calendar = () => {
                   date: format(new Date(), 'yyyy-MM-dd')
                 })
                 .eq('id', existingTransaction.id);
+
+              if (updateTxError) {
+                console.error('Transaction update error:', updateTxError);
+                throw new Error(`Erro ao atualizar pagamento: ${updateTxError.message}`);
+              }
             } else {
               // Create new transaction only if none exists
-              await supabase.from('transactions').insert([{
+              const { error: insertTxError } = await supabase.from('transactions').insert([{
                 booking_id: currentBookingId,
                 type: 'Income',
                 category: `Booking Payment - ${formData.guest_name}`,
@@ -975,13 +1462,22 @@ const Calendar = () => {
                 payment_method: formData.payment_method,
                 date: format(new Date(), 'yyyy-MM-dd')
               }]);
+
+              if (insertTxError) {
+                console.error('Transaction insert error:', insertTxError);
+                throw new Error(`Erro ao registrar pagamento: ${insertTxError.message}`);
+              }
             }
           } else if (existingTransaction) {
             // If payment is now 0, delete the transaction
-            await supabase
+            const { error: deleteTxError } = await supabase
               .from('transactions')
               .delete()
               .eq('id', existingTransaction.id);
+
+            if (deleteTxError) {
+              console.error('Transaction delete error:', deleteTxError);
+            }
           }
         }
       }
@@ -991,16 +1487,16 @@ const Calendar = () => {
 
       setAlertModal({
         isOpen: true,
-        title: 'Success',
-        message: 'Booking saved successfully',
+        title: 'Sucesso',
+        message: 'Reserva salva com sucesso',
         type: 'success'
       });
     } catch (error) {
       console.error('Save error:', error);
       setAlertModal({
         isOpen: true,
-        title: 'Error',
-        message: 'Error saving booking: ' + error.message,
+        title: 'Erro',
+        message: 'Erro ao salvar reserva: ' + error.message,
         type: 'error'
       });
     }
@@ -1009,36 +1505,36 @@ const Calendar = () => {
   return (
     <div className="h-[calc(100vh-2rem)] flex flex-col bg-white rounded-xl shadow-sm border border-gray-300 overflow-hidden">
       {/* Toolbar */}
-      <div className="p-4 border-b border-gray-300 flex justify-between items-center bg-white z-20 relative shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
-              <CalendarIcon size={20} />
+      <div className="p-2 sm:p-4 border-b border-gray-300 flex justify-between items-center bg-white z-20 relative shadow-sm gap-2">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 sm:p-2 bg-emerald-100 text-emerald-600 rounded-lg flex-shrink-0">
+              <CalendarIcon size={18} className="sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">Reservations</h1>
-              <p className="text-xs text-gray-500">{format(startDate, 'MMMM yyyy')}</p>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-lg font-bold text-gray-900 leading-tight truncate">Reservas</h1>
+              <p className="text-[10px] sm:text-xs text-gray-500 truncate">{format(startDate, 'MMM yyyy')}</p>
             </div>
           </div>
-          <div className="h-8 w-px bg-gray-300 mx-2"></div>
-          <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
-            <button onClick={() => setStartDate(addDays(startDate, -7))} className="p-1.5 hover:bg-white rounded-md shadow-sm transition-all text-gray-600">
-              <ChevronLeft size={18} />
+          <div className="h-6 sm:h-8 w-px bg-gray-300 mx-1 sm:mx-2 hidden sm:block"></div>
+          <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200">
+            <button onClick={() => setStartDate(addDays(startDate, -7))} className="p-1 sm:p-1.5 hover:bg-white rounded-md shadow-sm transition-all text-gray-600">
+              <ChevronLeft size={16} className="sm:w-[18px] sm:h-[18px]" />
             </button>
-            <button onClick={() => setStartDate(addDays(today, -2))} className="px-3 py-1 text-sm font-semibold text-gray-700 hover:text-emerald-600 transition-colors">
-              Today
+            <button onClick={() => setStartDate(addDays(today, -2))} className="px-2 sm:px-3 py-0.5 sm:py-1 text-xs sm:text-sm font-semibold text-gray-700 hover:text-emerald-600 transition-colors">
+              Hoje
             </button>
-            <button onClick={() => setStartDate(addDays(startDate, 7))} className="p-1.5 hover:bg-white rounded-md shadow-sm transition-all text-gray-600">
-              <ChevronRight size={18} />
+            <button onClick={() => setStartDate(addDays(startDate, 7))} className="p-1 sm:p-1.5 hover:bg-white rounded-md shadow-sm transition-all text-gray-600">
+              <ChevronRight size={16} className="sm:w-[18px] sm:h-[18px]" />
             </button>
           </div>
         </div>
         <button
           onClick={handleNewBooking}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 shadow-sm flex items-center gap-2 transition-all"
+          className="p-2 sm:px-4 sm:py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 shadow-sm flex items-center gap-1 sm:gap-2 transition-all flex-shrink-0"
         >
           <Plus size={16} />
-          New Booking
+          <span className="hidden sm:inline">Nova Reserva</span>
         </button>
       </div>
 
@@ -1046,13 +1542,13 @@ const Calendar = () => {
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 overflow-auto relative custom-scrollbar">
           {/* Header Row */}
-          <div className="sticky top-0 z-10 bg-white flex border-b border-gray-300" style={{ height: HEADER_HEIGHT, minWidth: 'max-content' }}>
+          <div className="sticky top-0 z-30 bg-white flex border-b border-gray-300" style={{ height: headerHeight, minWidth: 'max-content' }}>
             <div
-              className="sticky left-0 z-20 bg-white border-r border-gray-300 flex flex-col justify-end p-4 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
-              style={{ width: SIDEBAR_WIDTH }}
+              className="sticky left-0 z-40 bg-white border-r border-gray-300 flex flex-col justify-end p-2 sm:p-4 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
+              style={{ width: sidebarWidth }}
             >
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rooms & Beds</span>
-              <span className="font-bold text-gray-800 text-lg mt-1">All Rooms</span>
+              <span className="text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-wider">Quartos</span>
+              <span className="font-bold text-gray-800 text-sm sm:text-lg mt-0.5 sm:mt-1">Todos</span>
             </div>
             <div className="flex">
               {dates.map(date => {
@@ -1061,14 +1557,14 @@ const Calendar = () => {
                   <div
                     key={date.toString()}
                     className={`flex-shrink-0 border-r flex flex-col text-center group ${isToday ? 'bg-emerald-100 border-emerald-300' : 'bg-white border-gray-300'}`}
-                    style={{ width: CELL_WIDTH }}
+                    style={{ width: cellWidth }}
                   >
-                    <div className={`flex-1 flex items-end justify-center pb-2 border-b ${isToday ? 'border-emerald-200' : 'border-gray-200'}`}>
-                      <span className={`text-xs font-medium uppercase ${isToday ? 'text-emerald-700 font-bold' : 'text-gray-500'}`}>
-                        {format(date, 'EEE')}
+                    <div className={`flex-1 flex items-end justify-center pb-1 sm:pb-2 border-b ${isToday ? 'border-emerald-200' : 'border-gray-200'}`}>
+                      <span className={`text-[10px] sm:text-xs font-medium uppercase ${isToday ? 'text-emerald-700 font-bold' : 'text-gray-500'}`}>
+                        {format(date, isMobile ? 'EEEEE' : 'EEE')}
                       </span>
                     </div>
-                    <div className={`h-10 flex items-center justify-center font-bold text-lg ${isToday ? 'text-white bg-emerald-500' : 'text-gray-800 group-hover:bg-gray-50'}`}>
+                    <div className={`h-7 sm:h-10 flex items-center justify-center font-bold text-sm sm:text-lg ${isToday ? 'text-white bg-emerald-500' : 'text-gray-800 group-hover:bg-gray-50'}`}>
                       {format(date, 'd')}
                     </div>
                   </div>
@@ -1080,54 +1576,54 @@ const Calendar = () => {
           {/* Body Rows */}
           <div className="relative" style={{ minWidth: 'max-content' }}>
             {loading ? (
-              <div className="p-10 text-center text-gray-500">Loading calendar data...</div>
+              <div className="p-10 text-center text-gray-500">Carregando...</div>
             ) : rows.map(row => (
               <div
                 key={row.id}
-                className={`flex border-b border-gray-300 hover:bg-gray-50/50 transition-colors ${row.type === 'header' ? 'bg-gray-100/80 h-10' : 'h-16'}`}
+                className={`flex border-b border-gray-300 hover:bg-gray-50/50 transition-colors ${row.type === 'header' ? 'bg-gray-100/80 h-8 sm:h-10' : 'h-12 sm:h-16'}`}
               >
                 {/* Sidebar Cell */}
                 <div
-                  className={`sticky left-0 z-20 border-r border-gray-300 flex-shrink-0 flex items-center px-4 justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)] ${row.type === 'header' ? 'bg-gray-100 text-gray-600' : 'bg-white'}`}
-                  style={{ width: SIDEBAR_WIDTH }}
+                  className={`sticky left-0 z-20 border-r border-gray-300 flex-shrink-0 flex items-center px-2 sm:px-4 justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)] ${row.type === 'header' ? 'bg-gray-100 text-gray-600' : 'bg-white'}`}
+                  style={{ width: sidebarWidth }}
                 >
-                  <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="flex items-center gap-1.5 sm:gap-3 overflow-hidden">
                     {row.type === 'header' && (
-                      <span className="font-bold text-sm truncate">{row.name}</span>
+                      <span className="font-bold text-xs sm:text-sm truncate">{row.name}</span>
                     )}
                     {row.type === 'room' && (
                       <>
-                        <div className="w-1 h-8 bg-purple-500 rounded-full"></div>
+                        <div className="w-0.5 sm:w-1 h-6 sm:h-8 bg-purple-500 rounded-full flex-shrink-0"></div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-gray-800 text-sm truncate">{row.name}</span>
-                            {row.has_bathroom && <ShowerHead size={14} className="text-blue-500 flex-shrink-0" />}
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-gray-800 text-[11px] sm:text-sm truncate">{row.name}</span>
+                            {row.has_bathroom && <ShowerHead size={12} className="text-blue-500 flex-shrink-0 sm:w-3.5 sm:h-3.5" />}
                           </div>
-                          <div className="text-[10px] text-gray-400 font-medium uppercase tracking-tighter">Manage Prices</div>
+                          <div className="text-[8px] sm:text-[10px] text-gray-400 font-medium uppercase tracking-tighter hidden sm:block">Preços</div>
                         </div>
                       </>
                     )}
                     {row.type === 'room_booking' && (
                       <>
-                        <div className="w-8 flex justify-center opacity-50">
-                          <Bed size={14} className="text-gray-400" />
+                        <div className="w-5 sm:w-8 flex justify-center opacity-50">
+                          <Bed size={12} className="text-gray-400 sm:w-3.5 sm:h-3.5" />
                         </div>
-                        <span className="text-xs font-semibold text-gray-500 italic truncate opacity-70">{row.name}</span>
+                        <span className="text-[10px] sm:text-xs font-semibold text-gray-500 italic truncate opacity-70">{row.name}</span>
                       </>
                     )}
                     {row.type === 'bed' && (
                       <>
-                        <div className="w-8 flex justify-center">
-                          <Bed size={16} className="text-gray-400" />
+                        <div className="w-5 sm:w-8 flex justify-center">
+                          <Bed size={14} className="text-gray-400 sm:w-4 sm:h-4" />
                         </div>
-                        <span className="text-sm font-medium text-gray-600 truncate">{row.name}</span>
+                        <span className="text-[11px] sm:text-sm font-medium text-gray-600 truncate">{row.name}</span>
                       </>
                     )}
                   </div>
                 </div>
 
                 {/* Timeline Cells */}
-                <div className="flex relative" onDragEnd={handleDragEnd}>
+                <div className="flex relative isolate" onDragEnd={handleDragEnd}>
                   {dates.map(date => {
                     const roomId = row.type === 'room' ? row.id : row.parentId;
                     const rate = roomId ? getDailyRate(roomId, date) : null;
@@ -1145,19 +1641,19 @@ const Calendar = () => {
                           ${isToday ? 'bg-emerald-50 border-emerald-200' : 'border-gray-300'}
                           ${isSelected ? 'bg-blue-200 ring-2 ring-blue-400 ring-inset' : ''}
                         `}
-                        style={{ width: CELL_WIDTH }}
-                        onClick={() => {
+                        style={{ width: cellWidth }}
+                        onClick={(e) => {
                           if (isRoomHeader) {
                             handlePriceEdit(row, date, rate);
                           } else if (isClickable) {
-                            handleCellClick(row, date);
+                            handleCellClick(e, row, date);
                           }
                         }}
                         onDragOver={(e) => handleDragOver(e, date)}
                         onDrop={handleDrop}
                       >
                         {isRoomHeader && (
-                          <span className="text-[11px] font-bold text-emerald-700">
+                          <span className="text-[9px] sm:text-[11px] font-bold text-emerald-700">
                             ${rate || rooms.find(r => r.id === row.id)?.price_per_night || '--'}
                           </span>
                         )}
@@ -1181,9 +1677,15 @@ const Calendar = () => {
                     // Don't render if hidden
                     if (barStyle.display === 'none') return null;
 
-                    // Adjust padding based on clipping
-                    const paddingLeft = isClippedLeft ? 'pl-3' : (isShortStay ? 'pl-7' : 'pl-8');
-                    const paddingRight = isClippedRight ? 'pr-3' : (isShortStay ? 'pr-7' : 'pr-10');
+                    // Calculate pending balance
+                    const paidAmount = parseFloat(booking.paid_amount || 0);
+                    const totalAmount = parseFloat(booking.total_amount || 0);
+                    const pendingAmount = totalAmount - paidAmount;
+                    const hasPendingBalance = pendingAmount > 0;
+
+                    // Adjust padding based on clipping (responsive)
+                    const paddingLeft = isClippedLeft ? 'pl-1.5 sm:pl-3' : (isShortStay ? 'pl-4 sm:pl-7' : 'pl-5 sm:pl-8');
+                    const paddingRight = isClippedRight ? 'pr-1.5 sm:pr-3' : (isShortStay ? 'pr-4 sm:pr-7' : 'pr-6 sm:pr-10');
 
                     return (
                       // Shadow wrapper - applies drop-shadow to the clipped child
@@ -1191,35 +1693,33 @@ const Calendar = () => {
                         key={booking.id}
                         style={{
                           ...wrapperStyle,
-                          filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.25))'
+                          filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.2))'
                         }}
                         onClick={() => handleBookingClick(booking)}
-                        className="cursor-pointer group z-10"
-                        title={`${fullName} (${booking.status}) - ${nights} night${nights > 1 ? 's' : ''}`}
+                        className="cursor-pointer group"
+                        title={`${fullName} (${booking.status}) - ${nights} noite${nights > 1 ? 's' : ''}${hasPendingBalance ? ` - Pendente: R$${pendingAmount.toFixed(2)}` : ''}`}
                       >
                         {/* Inner bar with clip-path */}
                         <div
                           style={{ clipPath }}
                           className={`h-full w-full ${getStatusColor(booking.status)} transition-all group-hover:brightness-110 relative`}
                         >
-                          <div className={`h-full w-full flex items-center gap-1 relative ${paddingLeft} ${paddingRight}`}>
-                            <span className="font-bold text-xs text-white truncate drop-shadow-md">
+                          <div className={`h-full w-full flex items-center gap-1 sm:gap-1.5 relative ${paddingLeft} ${paddingRight}`}>
+                            <span className="font-bold text-[10px] sm:text-xs text-white drop-shadow-md truncate">
                               {displayName}
                             </span>
-
-                            {/* Status Indicators */}
-                            <div className={`flex items-center gap-1 ml-auto ${isShortStay && !isClippedRight ? '' : 'pr-2'}`}>
-                              {parseFloat(booking.paid_amount || 0) < parseFloat(booking.total_amount || 0) && (
-                                <div
-                                  className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_6px_rgba(239,68,68,0.8)] animate-pulse flex-shrink-0"
-                                  title={`Pending Payment: $${(parseFloat(booking.total_amount) - parseFloat(booking.paid_amount || 0)).toFixed(2)}`}
-                                />
-                              )}
-                            </div>
+                            {hasPendingBalance && (
+                              <span className="flex items-center gap-1 flex-shrink-0 bg-black/20 rounded-full px-1.5 sm:px-2 py-0.5">
+                                <span className="w-1.5 h-1.5 bg-red-400 rounded-full shadow-[0_0_4px_rgba(248,113,113,0.9)] animate-pulse"></span>
+                                <span className="text-[9px] sm:text-[10px] text-red-100 italic font-medium">
+                                  R${pendingAmount.toFixed(0)}
+                                </span>
+                              </span>
+                            )}
                           </div>
 
                           {/* Drag handle on right edge to extend booking */}
-                          {!isClippedRight && (
+                          {!isClippedRight && !isMobile && (
                             <div
                               draggable
                               onDragStart={(e) => handleDragStart(e, booking)}
@@ -1234,6 +1734,45 @@ const Calendar = () => {
                       </div>
                     );
                   })}
+
+                  {/* Date Locks */}
+                  {row.type !== 'header' && getResourceLocks(row, row.type).map(lock => {
+                    const lockStyle = getLockBarStyle(lock);
+                    if (lockStyle.display === 'none') return null;
+
+                    const lockLabel = lock.lock_type === 'Outro'
+                      ? (lock.description || 'Bloqueado')
+                      : lock.lock_type;
+
+                    return (
+                      <div
+                        key={lock.id}
+                        style={{
+                          ...lockStyle,
+                          filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.2))'
+                        }}
+                        onClick={() => setLockModal({
+                          isOpen: true,
+                          lock: lock,
+                          roomId: lock.room_id,
+                          bedId: lock.bed_id,
+                          startDate: lock.start_date,
+                          endDate: lock.end_date,
+                          lockType: lock.lock_type,
+                          description: lock.description || ''
+                        })}
+                        className="cursor-pointer group"
+                        title={`${lockLabel} (${lock.start_date} - ${lock.end_date})`}
+                      >
+                        <div className={`h-full w-full ${getLockColor(lock.lock_type)} text-white rounded-md flex items-center gap-1.5 px-2 sm:px-3 transition-all group-hover:brightness-110`}>
+                          <Lock size={12} className="flex-shrink-0" />
+                          <span className="font-bold text-[10px] sm:text-xs truncate">
+                            {lockLabel}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -1243,18 +1782,28 @@ const Calendar = () => {
 
       {/* Booking Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6 shadow-2xl my-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">
-                {selectedBooking ? 'Edit Booking' : 'New Guest & Booking'}
+        <div
+          className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto"
+          onClick={handleBackdropClick}
+        >
+          <div
+            ref={modalRef}
+            className="bg-white rounded-xl w-full max-w-2xl shadow-2xl my-4 sm:my-8 max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Fixed Header */}
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-gray-100 flex-shrink-0">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">
+                {selectedBooking ? 'Editar Reserva' : 'Novo Hóspede & Reserva'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
                 <X size={24} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveBooking} className="space-y-6">
+            <form onSubmit={handleSaveBooking} className="flex flex-col flex-1 min-h-0">
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
               {/* Conflict Warning */}
               {conflictWarning && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3 animate-pulse">
@@ -1267,41 +1816,40 @@ const Calendar = () => {
                 {/* Left Column - Personal Info */}
                 <div className="space-y-4">
                   <h3 className="font-bold text-gray-900 border-b pb-2 flex items-center gap-2 text-sm uppercase tracking-wider">
-                    <User size={18} className="text-emerald-600" /> Personal Info
+                    <User size={18} className="text-emerald-600" /> Dados Pessoais
                   </h3>
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Full Name *</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome Completo *</label>
                     <input
                       required
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                      placeholder="John Doe"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder:text-gray-300"
+                      placeholder="João Silva"
                       value={formData.guest_name}
                       onChange={(e) => setFormData({ ...formData, guest_name: e.target.value })}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Country *</label>
-                      <select
-                        required
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                        value={formData.nationality}
-                        onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
-                      >
-                        <option value="">Select...</option>
-                        {COUNTRIES.map(country => (
-                          <option key={country.code} value={country.name}>{country.name}</option>
-                        ))}
-                      </select>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">País *</label>
+                      <Select
+                        options={countryOptions}
+                        value={formData.nationality ? { value: formData.nationality, label: formData.nationality } : null}
+                        onChange={(option) => setFormData({ ...formData, nationality: option?.value || '' })}
+                        placeholder="Digite para buscar..."
+                        noOptionsMessage={() => "Nenhum país encontrado"}
+                        isClearable
+                        styles={selectStyles}
+                        classNamePrefix="react-select"
+                      />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Gender</label>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Gênero</label>
                       <select
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                         value={formData.gender}
                         onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                       >
-                        <option value="">Select...</option>
+                        <option value="">Selecione...</option>
                         {GENDERS.map(g => (
                           <option key={g.code} value={g.code}>{g.name}</option>
                         ))}
@@ -1310,7 +1858,7 @@ const Calendar = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Document Type</label>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Tipo de Doc.</label>
                       <select
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
                         value={formData.document_type}
@@ -1322,18 +1870,18 @@ const Calendar = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Document # *</label>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nº Doc. *</label>
                       <input
                         required
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-mono"
-                        placeholder="A12345678"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-mono placeholder:text-gray-300"
+                        placeholder="123.456.789-00"
                         value={formData.passport}
                         onChange={(e) => setFormData({ ...formData, passport: e.target.value })}
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Date of Birth</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data de Nasc.</label>
                     <input
                       type="date"
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
@@ -1346,49 +1894,51 @@ const Calendar = () => {
                 {/* Right Column - Contact Info */}
                 <div className="space-y-4">
                   <h3 className="font-bold text-gray-900 border-b pb-2 flex items-center gap-2 text-sm uppercase tracking-wider">
-                    <Mail size={18} className="text-emerald-600" /> Contact Info
+                    <Mail size={18} className="text-emerald-600" /> Contato
                   </h3>
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Email *</label>
                     <input
                       type="email"
                       required
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                      placeholder="john@example.com"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder:text-gray-300"
+                      placeholder="joao@email.com.br"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Phone / WhatsApp *</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Telefone / WhatsApp *</label>
                     <input
                       required
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                      placeholder="+1 234 567 890"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder:text-gray-300"
+                      placeholder="+55 11 98765-4321"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     />
                   </div>
                   <h4 className="font-semibold text-gray-700 text-xs uppercase tracking-wider pt-2 flex items-center gap-2">
-                    <Phone size={14} className="text-orange-500" /> Emergency Contact
+                    <Phone size={14} className="text-orange-500" /> Contato de Emergência
                   </h4>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Contact Name</label>
-                    <input
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                      placeholder="Jane Doe"
-                      value={formData.emergency_contact_name}
-                      onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Contact Phone</label>
-                    <input
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"
-                      placeholder="+1 234 567 890"
-                      value={formData.emergency_contact_phone}
-                      onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Nome</label>
+                      <input
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder:text-gray-300"
+                        placeholder="Maria Santos"
+                        value={formData.emergency_contact_name}
+                        onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Telefone</label>
+                      <input
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder:text-gray-300"
+                        placeholder="+55 11 99999-9999"
+                        value={formData.emergency_contact_phone}
+                        onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1396,31 +1946,59 @@ const Calendar = () => {
               {/* Booking Details Section */}
               <div className="space-y-4 pt-4 border-t border-gray-100">
                 <h3 className="font-bold text-gray-900 border-b pb-2 flex items-center gap-2 text-sm uppercase tracking-wider">
-                  <CalendarIcon size={18} className="text-emerald-600" /> Booking Details
+                  <CalendarIcon size={18} className="text-emerald-600" /> Detalhes da Reserva
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="md:col-span-3">
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Room / Bed Selection</label>
-                    <select
-                      required
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
-                      value={formData.room_id}
-                      onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
-                    >
-                      <option value="">Select a room or bed...</option>
-                      {rooms.map(room => (
-                        <optgroup key={room.id} label={room.name}>
-                          {room.type === 'Private' ? (
-                            <option value={room.id}>{room.name} (Private Room)</option>
-                          ) : (
-                            room.beds?.map(bed => (
-                              <option key={bed.id} value={bed.id}>{room.name} - Bed {bed.bed_number}</option>
-                            ))
-                          )}
-                        </optgroup>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Room/Bed Selection - conditional based on context */}
+                  {bookingContext && bookingContext.roomType !== 'Dorm' ? (
+                    // Non-dorm room (Private, Double, Family, Suite) - show read-only
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Quarto</label>
+                      <div className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-sm font-medium text-gray-700">
+                        {bookingContext.roomName}
+                      </div>
+                    </div>
+                  ) : bookingContext && bookingContext.roomType === 'Dorm' ? (
+                    // Dorm room - show only beds from this room
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Cama em {bookingContext.roomName}</label>
+                      <select
+                        required
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
+                        value={formData.room_id}
+                        onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
+                      >
+                        <option value="">Selecione uma cama...</option>
+                        {rooms.find(r => r.id === bookingContext.roomId)?.beds?.map(bed => (
+                          <option key={bed.id} value={bed.id}>Cama {bed.bed_number}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    // No context (new booking from button or editing) - show all rooms/beds
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Quarto / Cama</label>
+                      <select
+                        required
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
+                        value={formData.room_id}
+                        onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
+                      >
+                        <option value="">Selecione quarto ou cama...</option>
+                        {rooms.map(room => (
+                          <optgroup key={room.id} label={room.name}>
+                            {room.type === 'Dorm' ? (
+                              room.beds?.map(bed => (
+                                <option key={bed.id} value={bed.id}>{room.name} - Cama {bed.bed_number}</option>
+                              ))
+                            ) : (
+                              <option value={room.id}>{room.name}</option>
+                            )}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Check-in</label>
                     <input
@@ -1442,18 +2020,29 @@ const Calendar = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Booking Status</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Status</label>
                     <select
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
                       value={formData.status}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                     >
-                      <option value="Confirmed">Confirmed</option>
-                      <option value="Checked-in">Checked-in</option>
-                      <option value="Checked-out">Checked-out</option>
-                      <option value="Cancelled">Cancelled</option>
+                      <option value="Confirmed">Reservado</option>
+                      <option value="Checked-in">Check-in</option>
+                      <option value="Checked-out">Check-out</option>
+                      <option value="Cancelled">Cancelado</option>
                     </select>
                   </div>
+                </div>
+                {/* Booking Notes */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Observações da Reserva</label>
+                  <textarea
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm resize-none placeholder:text-gray-300"
+                    rows={2}
+                    placeholder="Pedidos especiais, horário de chegada, etc."
+                    value={formData.booking_notes}
+                    onChange={(e) => setFormData({ ...formData, booking_notes: e.target.value })}
+                  />
                 </div>
               </div>
 
@@ -1461,21 +2050,33 @@ const Calendar = () => {
               <div className="space-y-4 pt-4 border-t border-gray-100">
                 <div className="flex justify-between items-end border-b pb-2">
                   <h3 className="font-bold text-gray-900 flex items-center gap-2 text-sm uppercase tracking-wider">
-                    Initial Payment & Totals
+                    Pagamento
                   </h3>
-                  <div className="text-right">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase block">Estimated Total</span>
-                    <span className="text-xl font-black text-emerald-600">${formData.total_amount}</span>
+                  <div className="text-right flex items-end gap-2">
+                    {selectedBooking && (
+                      <button
+                        type="button"
+                        onClick={calculateTotal}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 underline"
+                        title="Recalcular com preços atuais"
+                      >
+                        Recalcular
+                      </button>
+                    )}
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase block">Total</span>
+                      <span className="text-xl font-black text-emerald-600">R${formData.total_amount}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Total Paid ($)</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Valor Pago (R$)</label>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-bold"
+                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-bold placeholder:text-gray-300"
                       placeholder="0.00"
                       value={formData.initial_payment}
                       onChange={(e) => setFormData({ ...formData, initial_payment: e.target.value })}
@@ -1489,14 +2090,14 @@ const Calendar = () => {
                       if (remaining > 0 && totalAmount > 0) {
                         return (
                           <div className="mt-2 text-sm">
-                            <span className="text-red-500">Remaining: </span>
-                            <span className="font-bold text-red-600">${remaining.toFixed(2)}</span>
+                            <span className="text-red-500">Pendente: </span>
+                            <span className="font-bold text-red-600">R${remaining.toFixed(2)}</span>
                           </div>
                         );
                       } else if (totalPaid >= totalAmount && totalAmount > 0) {
                         return (
                           <div className="mt-2 text-sm text-emerald-600 font-semibold flex items-center gap-1">
-                            <Check size={14} /> Fully Paid
+                            <Check size={14} /> Pago
                           </div>
                         );
                       }
@@ -1504,37 +2105,53 @@ const Calendar = () => {
                     })()}
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Payment Method</label>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Forma de Pagamento</label>
                     <select
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
                       value={formData.payment_method}
                       onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
                     >
-                      <option value="Cash">Cash</option>
-                      <option value="Credit Card">Credit Card</option>
-                      <option value="Debit Card">Debit Card</option>
-                      <option value="Transfer">Transfer</option>
+                      <option value="Cash">Dinheiro</option>
+                      <option value="Credit Card">Cartão de Crédito</option>
+                      <option value="Debit Card">Cartão de Débito</option>
+                      <option value="Bank Transfer">Transferência</option>
                       <option value="Pix">Pix</option>
                     </select>
                   </div>
                 </div>
               </div>
+              </div>
 
-              <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-2 text-sm font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!!conflictWarning}
-                  className={`px-8 py-2 rounded-lg font-bold text-sm shadow-md transition-all ${conflictWarning ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
-                >
-                  {selectedBooking ? 'Save Changes' : 'Confirm Registration & Booking'}
-                </button>
+              {/* Fixed Footer */}
+              <div className="flex justify-between gap-3 p-4 sm:p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0 rounded-b-xl">
+                {/* Cancel Booking Button - only show when editing existing booking */}
+                {selectedBooking && selectedBooking.status !== 'Cancelled' ? (
+                  <button
+                    type="button"
+                    onClick={handleCancelBooking}
+                    className="px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    Cancelar Reserva
+                  </button>
+                ) : (
+                  <div></div>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 sm:px-6 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!!conflictWarning}
+                    className={`px-4 sm:px-8 py-2 rounded-lg font-bold text-sm shadow-md transition-all ${conflictWarning ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'}`}
+                  >
+                    {selectedBooking ? 'Salvar' : 'Confirmar'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1551,23 +2168,29 @@ const Calendar = () => {
       />
       {/* Price Edit Modal */}
       {priceModal.isOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Adjust Price</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Setting price for <span className="font-semibold text-gray-800">{priceModal.room.name}</span> on <span className="font-semibold text-gray-800">{format(priceModal.date, 'MMMM d, yyyy')}</span>
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]"
+          onClick={() => setPriceModal({ ...priceModal, isOpen: false })}
+        >
+          <div
+            className="bg-white rounded-xl max-w-sm w-full p-4 sm:p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">Ajustar Preço</h3>
+            <p className="text-xs sm:text-sm text-gray-500 mb-4">
+              Preço para <span className="font-semibold text-gray-800">{priceModal.room.name}</span> em <span className="font-semibold text-gray-800">{format(priceModal.date, 'dd/MM/yyyy')}</span>
             </p>
 
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">New Price per Night</label>
+            <div className="mb-4 sm:mb-6">
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Preço por Noite</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">R$</span>
                 <input
                   type="number"
                   step="0.01"
                   value={priceModal.price}
                   onChange={(e) => setPriceModal({ ...priceModal, price: e.target.value })}
-                  className="w-full pl-7 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-gray-800"
+                  className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-gray-800"
                   autoFocus
                 />
               </div>
@@ -1578,13 +2201,192 @@ const Calendar = () => {
                 onClick={() => setPriceModal({ ...priceModal, isOpen: false })}
                 className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 font-semibold rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 onClick={saveDailyRate}
                 className="flex-1 px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 shadow-md"
               >
-                Save Price
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Popup (Booking or Lock) */}
+      {actionPopup.isOpen && (
+        <div
+          className="fixed inset-0 z-[70]"
+          onClick={() => setActionPopup({ ...actionPopup, isOpen: false })}
+        >
+          <div
+            className="absolute bg-white rounded-lg shadow-xl border border-gray-200 p-2 min-w-[160px]"
+            style={{
+              left: `${actionPopup.x}px`,
+              top: `${actionPopup.y - 10}px`,
+              transform: 'translate(-50%, -100%)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-[10px] text-gray-400 uppercase font-bold px-2 py-1 border-b mb-1">
+              {format(parseISO(actionPopup.checkIn), 'dd/MM')} - {format(parseISO(actionPopup.checkOut), 'dd/MM')}
+            </div>
+            <button
+              onClick={handleActionBooking}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-md transition-colors"
+            >
+              <User size={16} />
+              Nova Reserva
+            </button>
+            <button
+              onClick={handleActionLock}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-purple-50 hover:text-purple-700 rounded-md transition-colors"
+            >
+              <Lock size={16} />
+              Bloquear Datas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lock Modal */}
+      {lockModal.isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]"
+          onClick={() => setLockModal({ ...lockModal, isOpen: false })}
+        >
+          <div
+            className="bg-white rounded-xl max-w-sm w-full p-4 sm:p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Lock size={20} className="text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {lockModal.lock ? 'Editar Bloqueio' : 'Bloquear Datas'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {format(parseISO(lockModal.startDate), 'dd/MM/yyyy')} - {format(parseISO(lockModal.endDate), 'dd/MM/yyyy')}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Motivo</label>
+                <select
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                  value={lockModal.lockType}
+                  onChange={(e) => setLockModal({ ...lockModal, lockType: e.target.value })}
+                >
+                  <option value="Voluntariado">Voluntariado</option>
+                  <option value="Manutenção">Manutenção</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+
+              {lockModal.lockType === 'Outro' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Descrição</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm placeholder:text-gray-300"
+                    placeholder="Descreva o motivo..."
+                    value={lockModal.description}
+                    onChange={(e) => setLockModal({ ...lockModal, description: e.target.value })}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              {lockModal.lock && (
+                <button
+                  onClick={() => handleDeleteLock(lockModal.lock.id)}
+                  className="px-4 py-2 text-red-600 hover:bg-red-50 font-semibold rounded-lg transition-colors"
+                >
+                  Excluir
+                </button>
+              )}
+              <div className="flex-1"></div>
+              <button
+                onClick={() => setLockModal({ ...lockModal, isOpen: false })}
+                className="px-4 py-2 border border-gray-200 text-gray-600 font-semibold rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveLock}
+                className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 shadow-md"
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Booking Confirmation Modal */}
+      {cancelConfirm.isOpen && cancelConfirm.booking && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[80] animate-in fade-in duration-200"
+          onClick={() => setCancelConfirm({ isOpen: false, booking: null })}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full shadow-2xl transform transition-all animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header with warning icon */}
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertCircle size={32} className="text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Cancelar Reserva?</h3>
+              <p className="text-gray-500 text-sm">
+                Esta ação não pode ser desfeita.
+              </p>
+            </div>
+
+            {/* Booking Info Card */}
+            <div className="px-6 pb-4">
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <User size={20} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">{cancelConfirm.booking.guests?.full_name || 'Hóspede'}</p>
+                    <p className="text-xs text-gray-500">{cancelConfirm.booking.guests?.email || ''}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-1.5">
+                    <CalendarIcon size={14} className="text-gray-400" />
+                    <span>{format(parseISO(cancelConfirm.booking.check_in_date), 'dd/MM')} - {format(parseISO(cancelConfirm.booking.check_out_date), 'dd/MM')}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-emerald-600">R$ {cancelConfirm.booking.total_amount || 0}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 bg-gray-50 rounded-b-2xl flex gap-3">
+              <button
+                onClick={() => setCancelConfirm({ isOpen: false, booking: null })}
+                className="flex-1 px-4 py-3 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={confirmCancelBooking}
+                className="flex-1 px-4 py-3 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-600/30"
+              >
+                Sim, Cancelar
               </button>
             </div>
           </div>

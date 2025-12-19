@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import {
     Plus,
@@ -16,7 +15,6 @@ import {
 import ConfirmationModal from '../components/ConfirmationModal';
 
 const Finance = () => {
-    const { t } = useTranslation();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -191,15 +189,15 @@ const Finance = () => {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Finance</h1>
-                    <p className="text-gray-500">Track income, expenses, and cash flow</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Finanças</h1>
+                    <p className="text-gray-500">Controle de receitas, despesas e fluxo de caixa</p>
                 </div>
                 <button
                     onClick={openNewModal}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
                 >
                     <Plus size={20} />
-                    New Transaction
+                    Nova Transação
                 </button>
             </div>
 
@@ -211,11 +209,11 @@ const Finance = () => {
                             <TrendingUp size={24} />
                         </div>
                         <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full flex items-center gap-1">
-                            <ArrowUpRight size={12} /> Income
+                            <ArrowUpRight size={12} /> Receita
                         </span>
                     </div>
-                    <h3 className="text-3xl font-bold text-gray-900">${summary.income.toFixed(2)}</h3>
-                    <p className="text-sm text-gray-500 mt-1">Total Revenue</p>
+                    <h3 className="text-3xl font-bold text-gray-900">R${summary.income.toFixed(2)}</h3>
+                    <p className="text-sm text-gray-500 mt-1">Total de Receitas</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -224,11 +222,11 @@ const Finance = () => {
                             <TrendingDown size={24} />
                         </div>
                         <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full flex items-center gap-1">
-                            <ArrowDownRight size={12} /> Expense
+                            <ArrowDownRight size={12} /> Despesa
                         </span>
                     </div>
-                    <h3 className="text-3xl font-bold text-gray-900">${summary.expense.toFixed(2)}</h3>
-                    <p className="text-sm text-gray-500 mt-1">Total Expenses</p>
+                    <h3 className="text-3xl font-bold text-gray-900">R${summary.expense.toFixed(2)}</h3>
+                    <p className="text-sm text-gray-500 mt-1">Total de Despesas</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -237,13 +235,13 @@ const Finance = () => {
                             <DollarSign size={24} />
                         </div>
                         <span className="text-xs font-medium text-gray-500 bg-gray-50 px-2 py-1 rounded-full">
-                            Net Balance
+                            Saldo
                         </span>
                     </div>
                     <h3 className={`text-3xl font-bold ${summary.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                        ${summary.balance.toFixed(2)}
+                        R${summary.balance.toFixed(2)}
                     </h3>
-                    <p className="text-sm text-gray-500 mt-1">Current Cash Flow</p>
+                    <p className="text-sm text-gray-500 mt-1">Fluxo de Caixa Atual</p>
                 </div>
             </div>
 
@@ -251,7 +249,7 @@ const Finance = () => {
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-wrap gap-4 items-center">
                 <div className="flex items-center gap-2 text-gray-500">
                     <Filter size={20} />
-                    <span className="font-medium">Filters:</span>
+                    <span className="font-medium">Filtros:</span>
                 </div>
 
                 <select
@@ -259,9 +257,9 @@ const Finance = () => {
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value)}
                 >
-                    <option value="All">All Types</option>
-                    <option value="Income">Income</option>
-                    <option value="Expense">Expense</option>
+                    <option value="All">Todos os Tipos</option>
+                    <option value="Income">Receita</option>
+                    <option value="Expense">Despesa</option>
                 </select>
 
                 <select
@@ -269,11 +267,11 @@ const Finance = () => {
                     value={filterMethod}
                     onChange={(e) => setFilterMethod(e.target.value)}
                 >
-                    <option value="All">All Methods</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Credit Card">Credit Card</option>
-                    <option value="Debit Card">Debit Card</option>
-                    <option value="Transfer">Transfer</option>
+                    <option value="All">Todos os Métodos</option>
+                    <option value="Cash">Dinheiro</option>
+                    <option value="Credit Card">Cartão de Crédito</option>
+                    <option value="Debit Card">Cartão de Débito</option>
+                    <option value="Transfer">Transferência</option>
                     <option value="Pix">Pix</option>
                 </select>
             </div>
@@ -281,23 +279,23 @@ const Finance = () => {
             {/* Transactions List */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                    <h2 className="font-bold text-gray-900">Recent Transactions</h2>
+                    <h2 className="font-bold text-gray-900">Transações Recentes</h2>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold">
-                                <th className="px-6 py-4">Date</th>
-                                <th className="px-6 py-4">Description / Category</th>
-                                <th className="px-6 py-4">Type</th>
-                                <th className="px-6 py-4">Method</th>
-                                <th className="px-6 py-4 text-right">Amount</th>
-                                <th className="px-6 py-4 text-right">Actions</th>
+                                <th className="px-6 py-4">Data</th>
+                                <th className="px-6 py-4">Descrição / Categoria</th>
+                                <th className="px-6 py-4">Tipo</th>
+                                <th className="px-6 py-4">Método</th>
+                                <th className="px-6 py-4 text-right">Valor</th>
+                                <th className="px-6 py-4 text-right">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
-                                <tr><td colSpan="6" className="text-center py-8 text-gray-500">Loading transactions...</td></tr>
+                                <tr><td colSpan="6" className="text-center py-8 text-gray-500">Carregando transações...</td></tr>
                             ) : filteredTransactions.map((t) => (
                                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 text-sm text-gray-600">
@@ -312,29 +310,33 @@ const Finance = () => {
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${t.type === 'Income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
                                             }`}>
-                                            {t.type}
+                                            {t.type === 'Income' ? 'Receita' : 'Despesa'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-sm text-gray-600">
-                                        {t.payment_method || '-'}
+                                        {t.payment_method === 'Cash' ? 'Dinheiro' :
+                                         t.payment_method === 'Credit Card' ? 'Cartão de Crédito' :
+                                         t.payment_method === 'Debit Card' ? 'Cartão de Débito' :
+                                         t.payment_method === 'Transfer' ? 'Transferência' :
+                                         t.payment_method || '-'}
                                     </td>
                                     <td className={`px-6 py-4 text-right font-bold ${t.type === 'Income' ? 'text-emerald-600' : 'text-red-600'
                                         }`}>
-                                        {t.type === 'Income' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
+                                        {t.type === 'Income' ? '+' : '-'}R${parseFloat(t.amount).toFixed(2)}
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex items-center justify-end gap-2">
                                             <button
                                                 onClick={() => openEditModal(t)}
                                                 className="p-1 text-gray-400 hover:text-emerald-600 transition-colors"
-                                                title="Edit"
+                                                title="Editar"
                                             >
                                                 <Pencil size={16} />
                                             </button>
                                             <button
                                                 onClick={() => handleDeleteClick(t.id)}
                                                 className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                                                title="Delete"
+                                                title="Excluir"
                                             >
                                                 <Trash2 size={16} />
                                             </button>
@@ -347,7 +349,7 @@ const Finance = () => {
                 </div>
                 {!loading && filteredTransactions.length === 0 && (
                     <div className="p-8 text-center text-gray-500">
-                        No transactions found matching your filters.
+                        Nenhuma transação encontrada com os filtros aplicados.
                     </div>
                 )}
             </div>
@@ -357,7 +359,7 @@ const Finance = () => {
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-xl max-w-md w-full p-6">
                         <h2 className="text-xl font-bold mb-4">
-                            {editingTransaction ? 'Edit Transaction' : 'New Transaction'}
+                            {editingTransaction ? 'Editar Transação' : 'Nova Transação'}
                         </h2>
 
                         <form
@@ -367,18 +369,18 @@ const Finance = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
                                     <select
                                         value={formData.type}
                                         onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                                     >
-                                        <option value="Income">Income</option>
-                                        <option value="Expense">Expense</option>
+                                        <option value="Income">Receita</option>
+                                        <option value="Expense">Despesa</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
                                     <input
                                         type="date"
                                         required
@@ -390,19 +392,19 @@ const Finance = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Category / Description</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria / Descrição</label>
                                 <input
                                     required
                                     value={formData.category}
                                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    placeholder="e.g. Booking Payment, Electricity Bill"
+                                    placeholder="Ex: Pagamento de Reserva, Conta de Luz"
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
                                     <input
                                         type="number"
                                         step="0.01"
@@ -415,16 +417,16 @@ const Finance = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Método de Pagamento</label>
                                     <select
                                         value={formData.payment_method}
                                         onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                                     >
-                                        <option value="Cash">Cash</option>
-                                        <option value="Credit Card">Credit Card</option>
-                                        <option value="Debit Card">Debit Card</option>
-                                        <option value="Transfer">Transfer</option>
+                                        <option value="Cash">Dinheiro</option>
+                                        <option value="Credit Card">Cartão de Crédito</option>
+                                        <option value="Debit Card">Cartão de Débito</option>
+                                        <option value="Transfer">Transferência</option>
                                         <option value="Pix">Pix</option>
                                     </select>
                                 </div>
@@ -436,10 +438,10 @@ const Finance = () => {
                                     onClick={closeModal}
                                     className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
                                 >
-                                    Cancel
+                                    Cancelar
                                 </button>
                                 <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-sm">
-                                    {editingTransaction ? 'Save Changes' : 'Save Transaction'}
+                                    {editingTransaction ? 'Salvar Alterações' : 'Salvar Transação'}
                                 </button>
                             </div>
                         </form>
@@ -452,9 +454,9 @@ const Finance = () => {
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
                 onConfirm={confirmDelete}
-                title="Delete Transaction"
-                message="Are you sure you want to delete this transaction? This action cannot be undone."
-                confirmText="Delete"
+                title="Excluir Transação"
+                message="Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita."
+                confirmText="Excluir"
                 isDanger={true}
             />
         </div>
