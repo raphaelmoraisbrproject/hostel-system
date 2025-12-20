@@ -749,16 +749,19 @@ const Calendar = () => {
     if (isClippedLeft) width += cellWidth / 2;
     if (isClippedRight) width += cellWidth / 2;
 
-    // Same clip-path as bookings
+    // Same clip-path as bookings - adjust angle for short locks
+    const isShortLock = visibleDurationDays <= 2;
+    const slantSize = isShortLock ? '15px' : '25px';
+
     let clipPath;
     if (isClippedLeft && isClippedRight) {
       clipPath = 'none';
     } else if (isClippedLeft) {
-      clipPath = 'polygon(0 0, 100% 0, calc(100% - 25px) 100%, 0 100%)';
+      clipPath = `polygon(0 0, 100% 0, calc(100% - ${slantSize}) 100%, 0 100%)`;
     } else if (isClippedRight) {
-      clipPath = 'polygon(25px 0, 100% 0, 100% 100%, 0 100%)';
+      clipPath = `polygon(${slantSize} 0, 100% 0, 100% 100%, 0 100%)`;
     } else {
-      clipPath = 'polygon(25px 0, 100% 0, calc(100% - 25px) 100%, 0 100%)';
+      clipPath = `polygon(${slantSize} 0, 100% 0, calc(100% - ${slantSize}) 100%, 0 100%)`;
     }
 
     const verticalPadding = isMobile ? '8px' : '12px';
@@ -772,7 +775,8 @@ const Calendar = () => {
       zIndex: 1,
       clipPath,
       isClippedLeft,
-      isClippedRight
+      isClippedRight,
+      isShortLock
     };
   };
 
@@ -1768,9 +1772,9 @@ const Calendar = () => {
                       ? (lock.description || 'Bloqueado')
                       : lock.lock_type;
 
-                    const { clipPath, isClippedLeft, isClippedRight, ...wrapperStyle } = lockStyle;
-                    const paddingLeft = isClippedLeft ? 'pl-1.5 sm:pl-3' : 'pl-5 sm:pl-8';
-                    const paddingRight = isClippedRight ? 'pr-1.5 sm:pr-3' : 'pr-6 sm:pr-10';
+                    const { clipPath, isClippedLeft, isClippedRight, isShortLock, ...wrapperStyle } = lockStyle;
+                    const paddingLeft = isClippedLeft ? 'pl-1.5 sm:pl-3' : (isShortLock ? 'pl-3 sm:pl-5' : 'pl-5 sm:pl-8');
+                    const paddingRight = isClippedRight ? 'pr-1.5 sm:pr-3' : (isShortLock ? 'pr-3 sm:pr-5' : 'pr-6 sm:pr-10');
 
                     return (
                       <div
