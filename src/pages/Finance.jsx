@@ -162,10 +162,10 @@ const Finance = () => {
         setIsModalOpen(true);
     };
 
-    const openNewModal = () => {
+    const openNewModal = (type = 'Income') => {
         setEditingTransaction(null);
         setFormData({
-            type: 'Income',
+            type: type,
             date: new Date().toISOString().split('T')[0],
             category: '',
             amount: '',
@@ -192,13 +192,22 @@ const Finance = () => {
                     <h1 className="text-2xl font-bold text-gray-900">Finanças</h1>
                     <p className="text-gray-500">Controle de receitas, despesas e fluxo de caixa</p>
                 </div>
-                <button
-                    onClick={openNewModal}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
-                >
-                    <Plus size={20} />
-                    Nova Transação
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => openNewModal('Income')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+                    >
+                        <Plus size={18} />
+                        Nova Receita
+                    </button>
+                    <button
+                        onClick={() => openNewModal('Expense')}
+                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+                    >
+                        <Plus size={18} />
+                        Nova Despesa
+                    </button>
+                </div>
             </div>
 
             {/* Summary Cards */}
@@ -357,38 +366,30 @@ const Finance = () => {
             {/* Add/Edit Transaction Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl max-w-md w-full p-6">
-                        <h2 className="text-xl font-bold mb-4">
-                            {editingTransaction ? 'Editar Transação' : 'Nova Transação'}
-                        </h2>
+                    <div className="bg-white rounded-xl max-w-md w-full overflow-hidden">
+                        <div className={`px-6 py-4 ${formData.type === 'Income' ? 'bg-emerald-600' : 'bg-red-600'}`}>
+                            <h2 className="text-xl font-bold text-white">
+                                {editingTransaction
+                                    ? `Editar ${formData.type === 'Income' ? 'Receita' : 'Despesa'}`
+                                    : `Nova ${formData.type === 'Income' ? 'Receita' : 'Despesa'}`
+                                }
+                            </h2>
+                        </div>
 
                         <form
                             onSubmit={handleSaveTransaction}
-                            className="space-y-4"
+                            className="p-6 space-y-4"
                         >
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                                    <select
-                                        value={formData.type}
-                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    >
-                                        <option value="Income">Receita</option>
-                                        <option value="Expense">Despesa</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-                                    <input
-                                        type="date"
-                                        required
-                                        value={formData.date}
-                                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    />
-                                </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={formData.date}
+                                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none ${formData.type === 'Income' ? 'focus:ring-emerald-500' : 'focus:ring-red-500'}`}
+                                />
                             </div>
 
                             <div>
@@ -397,8 +398,8 @@ const Finance = () => {
                                     required
                                     value={formData.category}
                                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    placeholder="Ex: Pagamento de Reserva, Conta de Luz"
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none ${formData.type === 'Income' ? 'focus:ring-emerald-500' : 'focus:ring-red-500'}`}
+                                    placeholder={formData.type === 'Income' ? 'Ex: Pagamento de Reserva, Diária' : 'Ex: Conta de Luz, Manutenção'}
                                 />
                             </div>
 
@@ -412,7 +413,7 @@ const Finance = () => {
                                         min="0"
                                         value={formData.amount}
                                         onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none ${formData.type === 'Income' ? 'focus:ring-emerald-500' : 'focus:ring-red-500'}`}
                                         placeholder="0.00"
                                     />
                                 </div>
@@ -421,7 +422,7 @@ const Finance = () => {
                                     <select
                                         value={formData.payment_method}
                                         onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none ${formData.type === 'Income' ? 'focus:ring-emerald-500' : 'focus:ring-red-500'}`}
                                     >
                                         <option value="Cash">Dinheiro</option>
                                         <option value="Credit Card">Cartão de Crédito</option>
@@ -440,8 +441,15 @@ const Finance = () => {
                                 >
                                     Cancelar
                                 </button>
-                                <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-sm">
-                                    {editingTransaction ? 'Salvar Alterações' : 'Salvar Transação'}
+                                <button
+                                    type="submit"
+                                    className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm ${
+                                        formData.type === 'Income'
+                                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                                            : 'bg-red-600 hover:bg-red-700'
+                                    }`}
+                                >
+                                    {editingTransaction ? 'Salvar Alterações' : `Salvar ${formData.type === 'Income' ? 'Receita' : 'Despesa'}`}
                                 </button>
                             </div>
                         </form>
