@@ -651,17 +651,18 @@ const Calendar = () => {
       name: roomDisplayName,
       type: 'room',
       capacity: room.capacity,
-      isPrivate: room.type === 'Private',
+      isPrivate: room.type === 'Private' || room.type === 'Family',
       room_id: room.id, // for pricing lookups
       has_bathroom: room.has_bathroom
     });
 
-    // If Private, add a Row for the actual booking
-    if (room.type === 'Private') {
+    // If Private or Family, add a Row for the actual booking
+    if (room.type === 'Private' || room.type === 'Family') {
+      const typeLabel = room.type === 'Family' ? 'Familiar' : 'Privativo';
       rows.push({
         id: `booking-${room.id}`,
         parentId: room.id,
-        name: `${room.type} • ${room.capacity} Pers`,
+        name: `${typeLabel} • ${room.capacity} Pers`,
         type: 'room_booking',
         isPrivate: true
       });
