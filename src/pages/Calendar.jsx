@@ -2319,13 +2319,32 @@ const Calendar = () => {
                 <h3 className="text-lg font-bold text-gray-900">
                   {lockModal.lock ? 'Editar Bloqueio' : 'Bloquear Datas'}
                 </h3>
-                <p className="text-xs text-gray-500">
-                  {format(parseISO(lockModal.startDate), 'dd/MM/yyyy')} - {format(parseISO(lockModal.endDate), 'dd/MM/yyyy')}
-                </p>
               </div>
             </div>
 
             <div className="space-y-4">
+              {/* Date fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data Início</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                    value={lockModal.startDate}
+                    onChange={(e) => setLockModal({ ...lockModal, startDate: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data Fim</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
+                    value={lockModal.endDate}
+                    onChange={(e) => setLockModal({ ...lockModal, endDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Motivo</label>
                 <select
