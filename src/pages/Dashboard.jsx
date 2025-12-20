@@ -225,11 +225,16 @@ const Dashboard = () => {
                     {stats.pendingPayments.length}
                   </span>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {stats.pendingPayments.slice(0, 3).map(b => (
-                    <div key={b.id} className="flex justify-between text-sm">
-                      <span className="text-gray-700 truncate">{b.guests?.full_name}</span>
-                      <span className="text-red-600 font-semibold">{formatCurrency(b.pending)}</span>
+                    <div key={b.id} className="flex items-center justify-between text-sm bg-white/40 rounded-lg p-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-800 font-medium truncate">{b.guests?.full_name}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {b.rooms?.name}{b.beds?.bed_number ? ` - Cama ${b.beds.bed_number}` : ''}
+                        </p>
+                      </div>
+                      <span className="text-red-600 font-bold ml-2 whitespace-nowrap">{formatCurrency(b.pending)}</span>
                     </div>
                   ))}
                 </div>
