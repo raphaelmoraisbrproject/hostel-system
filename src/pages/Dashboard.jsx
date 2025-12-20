@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase';
 const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [expandedPayments, setExpandedPayments] = useState(false);
   const [stats, setStats] = useState({
     todayCheckIns: [],
     todayCheckOuts: [],
@@ -190,7 +191,6 @@ const Dashboard = () => {
     );
   }
 
-  const hasAlerts = stats.pendingPayments.length > 0 || stats.todayCheckOuts.length > 0;
 
   return (
     <div className="space-y-6">
@@ -210,79 +210,37 @@ const Dashboard = () => {
       </div>
 
       {/* Alerts Section - Compact Cards */}
-      {hasAlerts && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Pagamentos Pendentes */}
-          {stats.pendingPayments.length > 0 && (
-            <div className="bg-white rounded-lg border border-red-200 overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 bg-red-50 border-b border-red-100">
-                <div className="flex items-center gap-2">
-                  <Wallet size={14} className="text-red-500" />
-                  <span className="text-xs font-semibold text-red-700">Pagamentos Pendentes</span>
-                </div>
-                <span className="text-xs font-bold text-red-600">{formatCurrency(stats.totalPending)}</span>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {stats.pendingPayments.slice(0, 3).map(b => (
-                  <div key={b.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">{b.guests?.full_name}</p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {b.rooms?.name}{b.beds?.bed_number ? ` • Cama ${b.beds.bed_number}` : ''}
-                      </p>
-                    </div>
-                    <span className="text-sm font-semibold text-red-600 ml-2">{formatCurrency(b.pending)}</span>
-                  </div>
-                ))}
-              </div>
-              {stats.pendingPayments.length > 3 && (
-                <button
-                  onClick={() => navigate('/bookings')}
-                  className="w-full py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium flex items-center justify-center gap-1 border-t border-gray-100"
-                >
-                  +{stats.pendingPayments.length - 3} mais <ArrowRight size={12} />
-                </button>
-              )}
+      {stats.pendingPayments.length > 0 && (
+        <div className="bg-white rounded-lg border border-red-200 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 bg-red-50 border-b border-red-100">
+            <div className="flex items-center gap-2">
+              <Wallet size={14} className="text-red-500" />
+              <span className="text-xs font-semibold text-red-700">Pagamentos Pendentes</span>
+              <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">{stats.pendingPayments.length}</span>
             </div>
-          )}
-
-          {/* Check-outs Hoje */}
-          {stats.todayCheckOuts.length > 0 && (
-            <div className="bg-white rounded-lg border border-orange-200 overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 bg-orange-50 border-b border-orange-100">
-                <div className="flex items-center gap-2">
-                  <LogOut size={14} className="text-orange-500" />
-                  <span className="text-xs font-semibold text-orange-700">Check-outs Hoje</span>
+            <span className="text-sm font-bold text-red-600">{formatCurrency(stats.totalPending)}</span>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {stats.pendingPayments.slice(0, expandedPayments ? undefined : 2).map(b => (
+              <div key={b.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">{b.guests?.full_name}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {b.rooms?.name}{b.beds?.bed_number ? ` • Cama ${b.beds.bed_number}` : ''}
+                  </p>
                 </div>
-                <span className="text-xs font-bold text-orange-600">{stats.todayCheckOuts.length} hóspedes</span>
+                <span className="text-sm font-semibold text-red-600 ml-2">{formatCurrency(b.pending)}</span>
               </div>
-              <div className="divide-y divide-gray-100">
-                {stats.todayCheckOuts.slice(0, 3).map(b => (
-                  <div key={b.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">{b.guests?.full_name}</p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {b.rooms?.name}{b.beds?.bed_number ? ` • Cama ${b.beds.bed_number}` : ''}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => navigate('/calendar')}
-                      className="text-xs text-orange-600 hover:text-orange-700 font-medium ml-2"
-                    >
-                      Check-out →
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {stats.todayCheckOuts.length > 3 && (
-                <button
-                  onClick={() => navigate('/calendar')}
-                  className="w-full py-1.5 text-xs text-orange-600 hover:bg-orange-50 font-medium flex items-center justify-center gap-1 border-t border-gray-100"
-                >
-                  +{stats.todayCheckOuts.length - 3} mais <ArrowRight size={12} />
-                </button>
-              )}
-            </div>
+            ))}
+          </div>
+          {stats.pendingPayments.length > 2 && (
+            <button
+              onClick={() => setExpandedPayments(!expandedPayments)}
+              className="w-full py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium flex items-center justify-center gap-1 border-t border-gray-100"
+            >
+              {expandedPayments ? 'Ver menos' : `+${stats.pendingPayments.length - 2} mais`}
+              <ArrowRight size={12} className={`transition-transform ${expandedPayments ? 'rotate-90' : ''}`} />
+            </button>
           )}
         </div>
       )}
@@ -423,65 +381,77 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Today's Activity */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Atividade de Hoje</h3>
+        {/* Today's Activity - Compact */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <h3 className="text-sm font-bold text-gray-900">Atividade de Hoje</h3>
+          </div>
 
           {stats.todayCheckIns.length === 0 && stats.todayCheckOuts.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <Calendar size={32} className="mx-auto mb-2 opacity-50" />
-              <p className="text-sm">Nenhuma atividade programada</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {stats.todayCheckIns.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <LogIn size={14} className="text-blue-600" />
-                    <span className="text-xs font-bold text-gray-500 uppercase">Chegadas</span>
-                  </div>
+            <div className="p-4">
+              <div className="text-center py-4 text-gray-400">
+                <CheckCircle size={24} className="mx-auto mb-1 text-emerald-400" />
+                <p className="text-xs font-medium text-emerald-600">Tudo em dia!</p>
+              </div>
+              {/* Próximas chegadas */}
+              {stats.recentBookings.filter(b => b.status === 'Confirmed').length > 0 && (
+                <div className="border-t border-gray-100 pt-3 mt-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Próximas Chegadas</p>
                   <div className="space-y-2">
-                    {stats.todayCheckIns.slice(0, 4).map(b => (
-                      <div key={b.id} className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Users size={14} className="text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 truncate max-w-[120px]">
-                              {b.guests?.full_name}
-                            </p>
-                            <p className="text-xs text-gray-500">{b.rooms?.name}</p>
-                          </div>
-                        </div>
+                    {stats.recentBookings.filter(b => b.status === 'Confirmed').slice(0, 2).map(b => (
+                      <div key={b.id} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-700 truncate">{b.guests?.full_name}</span>
+                        <span className="text-gray-500">{format(parseISO(b.check_in_date), 'dd/MM')}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-
-              {stats.todayCheckOuts.length > 0 && (
-                <div>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {stats.todayCheckIns.length > 0 && (
+                <div className="p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <LogOut size={14} className="text-orange-600" />
-                    <span className="text-xs font-bold text-gray-500 uppercase">Saídas</span>
+                    <div className="w-5 h-5 bg-blue-100 rounded flex items-center justify-center">
+                      <LogIn size={12} className="text-blue-600" />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-700">Chegadas</span>
+                    <span className="text-xs bg-blue-100 text-blue-600 px-1.5 rounded font-bold">{stats.todayCheckIns.length}</span>
                   </div>
-                  <div className="space-y-2">
-                    {stats.todayCheckOuts.slice(0, 4).map(b => (
-                      <div key={b.id} className="flex items-center justify-between p-2 bg-orange-50 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                            <Users size={14} className="text-orange-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 truncate max-w-[120px]">
-                              {b.guests?.full_name}
-                            </p>
-                            <p className="text-xs text-gray-500">{b.rooms?.name}</p>
-                          </div>
-                        </div>
+                  <div className="space-y-1.5 ml-7">
+                    {stats.todayCheckIns.slice(0, 3).map(b => (
+                      <div key={b.id} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-800 font-medium truncate">{b.guests?.full_name}</span>
+                        <span className="text-gray-500 truncate ml-2">{b.rooms?.name}</span>
                       </div>
                     ))}
+                    {stats.todayCheckIns.length > 3 && (
+                      <p className="text-xs text-blue-600">+{stats.todayCheckIns.length - 3} mais</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {stats.todayCheckOuts.length > 0 && (
+                <div className="p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-5 h-5 bg-orange-100 rounded flex items-center justify-center">
+                      <LogOut size={12} className="text-orange-600" />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-700">Saídas</span>
+                    <span className="text-xs bg-orange-100 text-orange-600 px-1.5 rounded font-bold">{stats.todayCheckOuts.length}</span>
+                  </div>
+                  <div className="space-y-1.5 ml-7">
+                    {stats.todayCheckOuts.slice(0, 3).map(b => (
+                      <div key={b.id} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-800 font-medium truncate">{b.guests?.full_name}</span>
+                        <span className="text-gray-500 truncate ml-2">{b.rooms?.name}</span>
+                      </div>
+                    ))}
+                    {stats.todayCheckOuts.length > 3 && (
+                      <p className="text-xs text-orange-600">+{stats.todayCheckOuts.length - 3} mais</p>
+                    )}
                   </div>
                 </div>
               )}
