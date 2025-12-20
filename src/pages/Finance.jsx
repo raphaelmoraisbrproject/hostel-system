@@ -14,6 +14,30 @@ import {
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 
+// Currency formatting helpers
+const formatCurrencyInput = (value) => {
+    // Remove everything except digits
+    const digits = value.replace(/\D/g, '');
+
+    // Convert to number (in cents)
+    const cents = parseInt(digits || '0', 10);
+
+    // Convert to reais with 2 decimal places
+    const reais = (cents / 100).toFixed(2);
+
+    // Format with Brazilian locale
+    return new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(parseFloat(reais));
+};
+
+const parseCurrencyToNumber = (formattedValue) => {
+    // Remove dots (thousands) and replace comma with dot
+    const cleaned = formattedValue.replace(/\./g, '').replace(',', '.');
+    return parseFloat(cleaned) || 0;
+};
+
 const Finance = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [transactions, setTransactions] = useState([]);
@@ -32,6 +56,7 @@ const Finance = () => {
         date: new Date().toISOString().split('T')[0],
         category: '',
         amount: '',
+        displayAmount: '', // Formatted display value
         payment_method: 'Cash'
     });
 
@@ -119,6 +144,9 @@ const Finance = () => {
 
         const id = transactionToDelete;
 
+        // Find the transaction to get booking_id and amount before deleting
+        const transactionToRemove = transactions.find(t => t.id === id);
+
         // Optimistic update
         setTransactions(prev => prev.filter(t => t.id !== id));
         setIsDeleteModalOpen(false); // Close modal immediately
@@ -142,6 +170,29 @@ const Finance = () => {
                 return;
             }
 
+            // If transaction was linked to a booking and was Income, subtract from paid_amount
+            if (transactionToRemove?.booking_id && transactionToRemove?.type === 'Income') {
+                const amount = parseFloat(transactionToRemove.amount) || 0;
+                if (amount > 0) {
+                    // Get current booking paid_amount
+                    const { data: booking } = await supabase
+                        .from('bookings')
+                        .select('paid_amount')
+                        .eq('id', transactionToRemove.booking_id)
+                        .single();
+
+                    if (booking) {
+                        const currentPaid = parseFloat(booking.paid_amount) || 0;
+                        const newPaid = Math.max(0, currentPaid - amount); // Never go below 0
+
+                        await supabase
+                            .from('bookings')
+                            .update({ paid_amount: newPaid })
+                            .eq('id', transactionToRemove.booking_id);
+                    }
+                }
+            }
+
             fetchTransactions();
         } catch (error) {
             alert('Error deleting transaction: ' + error.message);
@@ -152,11 +203,13 @@ const Finance = () => {
 
     const openEditModal = (transaction) => {
         setEditingTransaction(transaction);
+        const amount = parseFloat(transaction.amount) || 0;
         setFormData({
             type: transaction.type,
             date: transaction.date,
             category: transaction.category,
-            amount: transaction.amount,
+            amount: amount,
+            displayAmount: formatCurrencyInput((amount * 100).toFixed(0)),
             payment_method: transaction.payment_method || 'Cash'
         });
         setIsModalOpen(true);
@@ -169,9 +222,22 @@ const Finance = () => {
             date: new Date().toISOString().split('T')[0],
             category: '',
             amount: '',
+            displayAmount: '',
             payment_method: 'Cash'
         });
         setIsModalOpen(true);
+    };
+
+    const handleAmountChange = (e) => {
+        const inputValue = e.target.value;
+        const formatted = formatCurrencyInput(inputValue);
+        const numericValue = parseCurrencyToNumber(formatted);
+
+        setFormData({
+            ...formData,
+            displayAmount: formatted,
+            amount: numericValue
+        });
     };
 
     const closeModal = () => {
@@ -407,14 +473,13 @@ const Finance = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
                                     <input
-                                        type="number"
-                                        step="0.01"
+                                        type="text"
+                                        inputMode="numeric"
                                         required
-                                        min="0"
-                                        value={formData.amount}
-                                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                        value={formData.displayAmount}
+                                        onChange={handleAmountChange}
                                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none ${formData.type === 'Income' ? 'focus:ring-emerald-500' : 'focus:ring-red-500'}`}
-                                        placeholder="0.00"
+                                        placeholder="0,00"
                                     />
                                 </div>
                                 <div>
