@@ -130,16 +130,16 @@ const Dashboard = () => {
       // Total pending
       const totalPending = pendingPayments.reduce((sum, b) => sum + b.pending, 0);
 
-      // Next 7 days occupancy forecast
+      // Next 7 days occupancy forecast (Confirmed + Checked-in)
       const nextSevenDays = [];
       for (let i = 0; i < 7; i++) {
         const date = addDays(today, i);
         const dateStr = format(date, 'yyyy-MM-dd');
-        const dayOccupied = bookings?.filter(b =>
-          b.check_in_date <= dateStr &&
-          b.check_out_date > dateStr &&
-          b.status !== 'Cancelled'
-        ).length || 0;
+        const dayOccupied = bookings?.filter(b => {
+          const isInRange = b.check_in_date <= dateStr && b.check_out_date > dateStr;
+          const isActiveStatus = b.status === 'Confirmed' || b.status === 'Checked-in';
+          return isInRange && isActiveStatus;
+        }).length || 0;
 
         nextSevenDays.push({
           date: dateStr,
