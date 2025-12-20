@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase';
 import { format, addDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { COUNTRIES, DOCUMENT_TYPES, GENDERS } from '../constants/countries';
-import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
+import { formatCurrencyInput, parseCurrencyToNumber, numberToInputFormat } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 // Convert countries to react-select format with popular countries first
 const POPULAR_COUNTRIES = ['BR', 'AR', 'US', 'PT', 'ES', 'FR', 'DE', 'GB', 'IT', 'CL', 'CO', 'MX', 'UY', 'PY'];
@@ -94,6 +95,7 @@ const initialFormData = {
 };
 
 const Guests = () => {
+    const { formatCurrency } = useCurrency();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [guests, setGuests] = useState([]);
@@ -299,10 +301,6 @@ const Guests = () => {
                 {style.label}
             </span>
         );
-    };
-
-    const formatCurrency = (value) => {
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
     };
 
     const addGuest = async () => {

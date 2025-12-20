@@ -4,9 +4,11 @@ import { ptBR } from 'date-fns/locale';
 import { Search, Filter, Calendar, User, Bed, X, Eye, Edit2, FileText, Mail, Phone, DollarSign, AlertCircle, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AlertModal from '../components/AlertModal';
-import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
+import { formatCurrencyInput, parseCurrencyToNumber, numberToInputFormat } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 const Bookings = () => {
+  const { formatCurrency } = useCurrency();
   const [bookings, setBookings] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -190,10 +192,6 @@ const Bookings = () => {
 
     return matchesSearch && matchesStatus && matchesPayment && matchesRoom && matchesDate;
   });
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
-  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';

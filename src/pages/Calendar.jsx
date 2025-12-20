@@ -5,7 +5,8 @@ import Select from 'react-select';
 import { supabase } from '../lib/supabase';
 import AlertModal from '../components/AlertModal';
 import { COUNTRIES, DOCUMENT_TYPES, GENDERS } from '../constants/countries';
-import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
+import { formatCurrencyInput, parseCurrencyToNumber, numberToInputFormat } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 // Convert countries to react-select format with popular countries first
 const POPULAR_COUNTRIES = ['BR', 'AR', 'US', 'PT', 'ES', 'FR', 'DE', 'GB', 'IT', 'CL', 'CO', 'MX', 'UY', 'PY'];
@@ -83,6 +84,7 @@ const SIDEBAR_WIDTH = 240; // Width of the room sidebar (desktop)
 const SIDEBAR_WIDTH_MOBILE = 140; // Width of the room sidebar (mobile)
 
 const Calendar = () => {
+  const { formatCurrency } = useCurrency();
   const [today] = useState(new Date());
   // Start 2 days before today to show recent bookings
   const [startDate, setStartDate] = useState(addDays(today, -2));

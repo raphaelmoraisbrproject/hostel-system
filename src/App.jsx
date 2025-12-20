@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -9,15 +10,14 @@ import Calendar from './pages/Calendar';
 import Bookings from './pages/Bookings';
 import Guests from './pages/Guests';
 import Finance from './pages/Finance';
+import Settings from './pages/Settings';
 import './i18n';
-
-// Placeholder components
-const Settings = () => <div className="p-4"><h1 className="text-2xl font-bold">Settings</h1></div>;
 
 function App() {
   return (
     <AuthProvider>
-      <Router>
+      <SettingsProvider>
+        <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={
@@ -56,7 +56,8 @@ function App() {
             </ProtectedRoute>
           } />
         </Routes>
-      </Router>
+        </Router>
+      </SettingsProvider>
     </AuthProvider>
   );
 }

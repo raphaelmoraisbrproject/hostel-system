@@ -13,9 +13,11 @@ import {
     Trash2
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
+import { formatCurrencyInput, parseCurrencyToNumber, numberToInputFormat } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 const Finance = () => {
+    const { formatCurrency } = useCurrency();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);

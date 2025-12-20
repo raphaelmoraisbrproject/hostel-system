@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
+import { formatCurrencyInput, parseCurrencyToNumber, numberToInputFormat } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 const ROOM_TYPES = [
     { value: 'Dorm', label: 'Quarto Compartilhado', icon: Users, color: 'blue', description: 'Reserva por cama individual' },
@@ -52,6 +53,7 @@ const BED_STATUS_CONFIG = {
 
 const Rooms = () => {
     const { t } = useTranslation();
+    const { formatCurrency } = useCurrency();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [selectedRoom, setSelectedRoom] = useState(null);

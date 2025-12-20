@@ -9,9 +9,11 @@ import { format, addDays, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfM
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { supabase } from '../lib/supabase';
+import { useCurrency } from '../hooks/useCurrency';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { formatCurrency } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [expandedPayments, setExpandedPayments] = useState(false);
   const [stats, setStats] = useState({
@@ -177,10 +179,6 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
   };
 
   if (loading) {
