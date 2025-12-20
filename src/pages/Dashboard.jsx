@@ -60,7 +60,7 @@ const Dashboard = () => {
           `)
           .neq('status', 'Cancelled'),
         supabase.from('rooms').select('*').eq('is_active', true),
-        supabase.from('beds').select('*').eq('is_active', true)
+        supabase.from('beds').select('*').eq('status', 'Active')
       ]);
 
       // Calculate total beds
