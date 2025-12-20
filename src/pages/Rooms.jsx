@@ -441,7 +441,7 @@ const Rooms = () => {
                                             )}
                                         </div>
                                         <div className="font-bold text-emerald-600">
-                                            R$ {parseFloat(room.price_per_night).toFixed(2)}
+                                            {formatCurrency(room.price_per_night)}
                                             <span className="text-gray-400 font-normal text-xs">/noite</span>
                                         </div>
                                     </div>

@@ -264,7 +264,7 @@ const Finance = () => {
                             <ArrowUpRight size={12} /> Receita
                         </span>
                     </div>
-                    <h3 className="text-3xl font-bold text-gray-900">R${summary.income.toFixed(2)}</h3>
+                    <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(summary.income)}</h3>
                     <p className="text-sm text-gray-500 mt-1">Total de Receitas</p>
                 </div>
 
@@ -277,7 +277,7 @@ const Finance = () => {
                             <ArrowDownRight size={12} /> Despesa
                         </span>
                     </div>
-                    <h3 className="text-3xl font-bold text-gray-900">R${summary.expense.toFixed(2)}</h3>
+                    <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(summary.expense)}</h3>
                     <p className="text-sm text-gray-500 mt-1">Total de Despesas</p>
                 </div>
 
@@ -291,7 +291,7 @@ const Finance = () => {
                         </span>
                     </div>
                     <h3 className={`text-3xl font-bold ${summary.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                        R${summary.balance.toFixed(2)}
+                        {formatCurrency(summary.balance)}
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">Fluxo de Caixa Atual</p>
                 </div>
@@ -374,7 +374,7 @@ const Finance = () => {
                                     </td>
                                     <td className={`px-6 py-4 text-right font-bold ${t.type === 'Income' ? 'text-emerald-600' : 'text-red-600'
                                         }`}>
-                                        {t.type === 'Income' ? '+' : '-'}R${parseFloat(t.amount).toFixed(2)}
+                                        {t.type === 'Income' ? '+' : '-'}{formatCurrency(parseFloat(t.amount))}
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex items-center justify-end gap-2">

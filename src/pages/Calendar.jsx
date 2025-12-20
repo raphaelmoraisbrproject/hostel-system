@@ -1271,16 +1271,16 @@ const Calendar = () => {
       const newBalance = newTotal - adjustedPaidAmount;
 
       let message = `Check-out alterado para ${format(newCheckOutDate, 'dd/MM/yyyy')}\n`;
-      message += `Novo total: R$ ${newTotal.toFixed(2)}`;
+      message += `Novo total: ${formatCurrency(newTotal)}`;
       if (difference > 0) {
-        message += ` (+R$ ${difference.toFixed(2)})`;
+        message += ` (+${formatCurrency(difference)})`;
       } else if (difference < 0) {
-        message += ` (-R$ ${Math.abs(difference).toFixed(2)})`;
+        message += ` (-${formatCurrency(Math.abs(difference))})`;
       }
       if (refundDue > 0) {
-        message += `\n⚠️ Reembolso devido: R$ ${refundDue.toFixed(2)}`;
+        message += `\n⚠️ Reembolso devido: ${formatCurrency(refundDue)}`;
       } else if (newBalance > 0) {
-        message += `\nSaldo pendente: R$ ${newBalance.toFixed(2)}`;
+        message += `\nSaldo pendente: ${formatCurrency(newBalance)}`;
       }
 
       let alertType = 'success';
@@ -1781,7 +1781,7 @@ const Calendar = () => {
                         }}
                         onClick={() => handleBookingClick(booking)}
                         className="cursor-pointer group"
-                        title={`${fullName} (${booking.status}) - ${nights} noite${nights > 1 ? 's' : ''}${hasPendingBalance ? ` - Pendente: R$${pendingAmount.toFixed(2)}` : ''}`}
+                        title={`${fullName} (${booking.status}) - ${nights} noite${nights > 1 ? 's' : ''}${hasPendingBalance ? ` - Pendente: ${formatCurrency(pendingAmount)}` : ''}`}
                       >
                         {/* Inner bar with clip-path */}
                         <div
@@ -1796,7 +1796,7 @@ const Calendar = () => {
                               <span className="flex items-center gap-1 flex-shrink-0 bg-black/20 rounded-full px-1.5 sm:px-2 py-0.5">
                                 <span className="w-1.5 h-1.5 bg-red-400 rounded-full shadow-[0_0_4px_rgba(248,113,113,0.9)] animate-pulse"></span>
                                 <span className="text-[9px] sm:text-[10px] text-red-100 italic font-medium">
-                                  R${pendingAmount.toFixed(0)}
+                                  {formatCurrency(pendingAmount)}
                                 </span>
                               </span>
                             )}
@@ -2481,7 +2481,7 @@ const Calendar = () => {
                     <span>{format(parseISO(cancelConfirm.booking.check_in_date), 'dd/MM')} - {format(parseISO(cancelConfirm.booking.check_out_date), 'dd/MM')}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-emerald-600">R$ {cancelConfirm.booking.total_amount || 0}</span>
+                    <span className="font-medium text-emerald-600">{formatCurrency(cancelConfirm.booking.total_amount)}</span>
                   </div>
                 </div>
               </div>
