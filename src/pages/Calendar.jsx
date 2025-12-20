@@ -739,16 +739,40 @@ const Calendar = () => {
       return { display: 'none' };
     }
 
-    const leftPosition = isClippedLeft ? 0 : (visibleStartDays * cellWidth);
+    // Same positioning as bookings - start at middle of first day
+    const leftPosition = isClippedLeft
+      ? 0
+      : (visibleStartDays * cellWidth) + (cellWidth / 2);
+
+    // Same width calculation as bookings
     let width = visibleDurationDays * cellWidth;
+    if (isClippedLeft) width += cellWidth / 2;
+    if (isClippedRight) width += cellWidth / 2;
+
+    // Same clip-path as bookings
+    let clipPath;
+    if (isClippedLeft && isClippedRight) {
+      clipPath = 'none';
+    } else if (isClippedLeft) {
+      clipPath = 'polygon(0 0, 100% 0, calc(100% - 25px) 100%, 0 100%)';
+    } else if (isClippedRight) {
+      clipPath = 'polygon(25px 0, 100% 0, 100% 100%, 0 100%)';
+    } else {
+      clipPath = 'polygon(25px 0, 100% 0, calc(100% - 25px) 100%, 0 100%)';
+    }
+
+    const verticalPadding = isMobile ? '8px' : '12px';
 
     return {
       left: `${leftPosition}px`,
       width: `${width}px`,
       position: 'absolute',
-      top: isMobile ? '8px' : '12px',
-      bottom: isMobile ? '8px' : '12px',
-      zIndex: 1
+      top: verticalPadding,
+      bottom: verticalPadding,
+      zIndex: 1,
+      clipPath,
+      isClippedLeft,
+      isClippedRight
     };
   };
 
@@ -1744,11 +1768,15 @@ const Calendar = () => {
                       ? (lock.description || 'Bloqueado')
                       : lock.lock_type;
 
+                    const { clipPath, isClippedLeft, isClippedRight, ...wrapperStyle } = lockStyle;
+                    const paddingLeft = isClippedLeft ? 'pl-1.5 sm:pl-3' : 'pl-5 sm:pl-8';
+                    const paddingRight = isClippedRight ? 'pr-1.5 sm:pr-3' : 'pr-6 sm:pr-10';
+
                     return (
                       <div
                         key={lock.id}
                         style={{
-                          ...lockStyle,
+                          ...wrapperStyle,
                           filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.2))'
                         }}
                         onClick={() => setLockModal({
@@ -1764,11 +1792,16 @@ const Calendar = () => {
                         className="cursor-pointer group"
                         title={`${lockLabel} (${lock.start_date} - ${lock.end_date})`}
                       >
-                        <div className={`h-full w-full ${getLockColor(lock.lock_type)} text-white rounded-md flex items-center gap-1.5 px-2 sm:px-3 transition-all group-hover:brightness-110`}>
-                          <Lock size={12} className="flex-shrink-0" />
-                          <span className="font-bold text-[10px] sm:text-xs truncate">
-                            {lockLabel}
-                          </span>
+                        <div
+                          style={{ clipPath }}
+                          className={`h-full w-full ${getLockColor(lock.lock_type)} text-white transition-all group-hover:brightness-110`}
+                        >
+                          <div className={`h-full w-full flex items-center gap-1.5 ${paddingLeft} ${paddingRight}`}>
+                            <Lock size={12} className="flex-shrink-0" />
+                            <span className="font-bold text-[10px] sm:text-xs truncate">
+                              {lockLabel}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
