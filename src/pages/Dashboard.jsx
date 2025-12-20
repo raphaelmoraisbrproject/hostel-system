@@ -92,11 +92,11 @@ const Dashboard = () => {
       const occupiedBeds = currentlyOccupied.length;
       const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
-      // Pending payments (guests with balance due)
+      // Pending payments (only guests already checked-in)
       const pendingPayments = bookings?.filter(b => {
         const total = parseFloat(b.total_amount) || 0;
         const paid = parseFloat(b.paid_amount) || 0;
-        return total > 0 && paid < total && b.status !== 'Checked-out';
+        return total > 0 && paid < total && b.status === 'Checked-in';
       }).map(b => ({
         ...b,
         pending: (parseFloat(b.total_amount) || 0) - (parseFloat(b.paid_amount) || 0)
