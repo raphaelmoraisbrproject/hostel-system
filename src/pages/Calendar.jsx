@@ -764,7 +764,7 @@ const Calendar = () => {
       clipPath = `polygon(${slantSize} 0, 100% 0, calc(100% - ${slantSize}) 100%, 0 100%)`;
     }
 
-    const verticalPadding = isMobile ? '8px' : '12px';
+    const verticalPadding = isMobile ? '6px' : '8px';
 
     return {
       left: `${leftPosition}px`,
@@ -846,8 +846,8 @@ const Calendar = () => {
       clipPath = 'polygon(25px 0, 100% 0, calc(100% - 25px) 100%, 0 100%)'; // Normal
     }
 
-    // Responsive vertical positioning (row is h-12/48px on mobile, h-16/64px on desktop)
-    const verticalPadding = isMobile ? '8px' : '12px';
+    // Responsive vertical positioning (smaller rows now)
+    const verticalPadding = isMobile ? '6px' : '8px';
 
     return {
       left: `${leftPosition}px`,
@@ -1605,46 +1605,59 @@ const Calendar = () => {
           <div className="relative" style={{ minWidth: 'max-content' }}>
             {loading ? (
               <div className="p-10 text-center text-gray-500">Carregando...</div>
-            ) : rows.map(row => (
+            ) : rows.map(row => {
+              // Define row heights based on type
+              const rowHeight = row.type === 'header'
+                ? 'h-8 sm:h-10'
+                : row.type === 'room'
+                  ? 'h-10 sm:h-12'
+                  : 'h-9 sm:h-11'; // bed and room_booking - smaller
+
+              const rowBg = row.type === 'header'
+                ? 'bg-gray-100/80'
+                : row.type === 'room'
+                  ? 'bg-slate-50/50'
+                  : 'bg-white';
+
+              return (
               <div
                 key={row.id}
-                className={`flex border-b border-gray-300 hover:bg-gray-50/50 transition-colors ${row.type === 'header' ? 'bg-gray-100/80 h-8 sm:h-10' : 'h-12 sm:h-16'}`}
+                className={`flex border-b border-gray-200 hover:bg-gray-50/50 transition-colors ${rowHeight} ${rowBg}`}
               >
                 {/* Sidebar Cell */}
                 <div
-                  className={`sticky left-0 z-20 border-r border-gray-300 flex-shrink-0 flex items-center px-2 sm:px-4 justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)] ${row.type === 'header' ? 'bg-gray-100 text-gray-600' : 'bg-white'}`}
+                  className={`sticky left-0 z-20 border-r border-gray-200 flex-shrink-0 flex items-center px-2 sm:px-3 justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)] ${row.type === 'header' ? 'bg-gray-100 text-gray-600' : row.type === 'room' ? 'bg-slate-50' : 'bg-white'}`}
                   style={{ width: sidebarWidth }}
                 >
-                  <div className="flex items-center gap-1.5 sm:gap-3 overflow-hidden">
+                  <div className="flex items-center gap-1 sm:gap-2 overflow-hidden">
                     {row.type === 'header' && (
                       <span className="font-bold text-xs sm:text-sm truncate">{row.name}</span>
                     )}
                     {row.type === 'room' && (
                       <>
-                        <div className="w-0.5 sm:w-1 h-6 sm:h-8 bg-purple-500 rounded-full flex-shrink-0"></div>
+                        <div className="w-1 h-5 sm:h-6 bg-purple-500 rounded-full flex-shrink-0"></div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1">
                             <span className="font-bold text-gray-800 text-[11px] sm:text-sm truncate">{row.name}</span>
-                            {row.has_bathroom && <ShowerHead size={12} className="text-blue-500 flex-shrink-0 sm:w-3.5 sm:h-3.5" />}
+                            {row.has_bathroom && <ShowerHead size={11} className="text-blue-500 flex-shrink-0" />}
                           </div>
-                          <div className="text-[8px] sm:text-[10px] text-gray-400 font-medium uppercase tracking-tighter hidden sm:block">Preços</div>
                         </div>
                       </>
                     )}
                     {row.type === 'room_booking' && (
                       <>
-                        <div className="w-5 sm:w-8 flex justify-center opacity-50">
-                          <Bed size={12} className="text-gray-400 sm:w-3.5 sm:h-3.5" />
+                        <div className="w-4 sm:w-5 ml-2 sm:ml-3 flex justify-center opacity-50">
+                          <Bed size={11} className="text-gray-400" />
                         </div>
-                        <span className="text-[10px] sm:text-xs font-semibold text-gray-500 italic truncate opacity-70">{row.name}</span>
+                        <span className="text-[9px] sm:text-[11px] font-medium text-gray-400 italic truncate">{row.name}</span>
                       </>
                     )}
                     {row.type === 'bed' && (
                       <>
-                        <div className="w-5 sm:w-8 flex justify-center">
-                          <Bed size={14} className="text-gray-400 sm:w-4 sm:h-4" />
+                        <div className="w-4 sm:w-5 ml-2 sm:ml-3 flex justify-center">
+                          <Bed size={12} className="text-gray-400" />
                         </div>
-                        <span className="text-[11px] sm:text-sm font-medium text-gray-600 truncate">{row.name}</span>
+                        <span className="text-[10px] sm:text-xs font-medium text-gray-600 truncate">{row.name}</span>
                       </>
                     )}
                   </div>
@@ -1812,7 +1825,8 @@ const Calendar = () => {
                   })}
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       </div>
