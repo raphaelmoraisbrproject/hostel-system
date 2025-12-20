@@ -357,8 +357,8 @@ const Dashboard = () => {
                   {stats.nextSevenDays.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.isToday ? '#10B981' : entry.rate >= 80 ? '#10B981' : entry.rate >= 50 ? '#F59E0B' : '#EF4444'}
-                      opacity={entry.isToday ? 1 : 0.7}
+                      fill={entry.rate >= 80 ? '#10B981' : entry.rate >= 50 ? '#F59E0B' : '#EF4444'}
+                      opacity={entry.isToday ? 1 : 0.8}
                     />
                   ))}
                 </Bar>
