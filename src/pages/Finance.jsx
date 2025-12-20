@@ -13,30 +13,7 @@ import {
     Trash2
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
-
-// Currency formatting helpers
-const formatCurrencyInput = (value) => {
-    // Remove everything except digits
-    const digits = value.replace(/\D/g, '');
-
-    // Convert to number (in cents)
-    const cents = parseInt(digits || '0', 10);
-
-    // Convert to reais with 2 decimal places
-    const reais = (cents / 100).toFixed(2);
-
-    // Format with Brazilian locale
-    return new Intl.NumberFormat('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(parseFloat(reais));
-};
-
-const parseCurrencyToNumber = (formattedValue) => {
-    // Remove dots (thousands) and replace comma with dot
-    const cleaned = formattedValue.replace(/\./g, '').replace(',', '.');
-    return parseFloat(cleaned) || 0;
-};
+import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
 
 const Finance = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -209,7 +186,7 @@ const Finance = () => {
             date: transaction.date,
             category: transaction.category,
             amount: amount,
-            displayAmount: formatCurrencyInput((amount * 100).toFixed(0)),
+            displayAmount: numberToInputFormat(amount),
             payment_method: transaction.payment_method || 'Cash'
         });
         setIsModalOpen(true);

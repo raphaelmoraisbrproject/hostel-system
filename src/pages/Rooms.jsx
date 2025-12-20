@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
 
 const ROOM_TYPES = [
     { value: 'Dorm', label: 'Quarto Compartilhado', icon: Users, color: 'blue', description: 'Reserva por cama individual' },
@@ -67,6 +68,7 @@ const Rooms = () => {
         type: 'Dorm',
         capacity: 4,
         price_per_night: '',
+        displayPrice: '',
         description: '',
         gender_restriction: 'Mixed',
         bed_type: 'Single',
@@ -74,6 +76,17 @@ const Rooms = () => {
         has_bathroom: false,
         is_active: true,
     });
+
+    // Currency input handler for room price
+    const handlePriceChange = (e) => {
+        const formatted = formatCurrencyInput(e.target.value);
+        const numericValue = parseCurrencyToNumber(formatted);
+        setFormData(prev => ({
+            ...prev,
+            displayPrice: formatted,
+            price_per_night: numericValue
+        }));
+    };
 
     useEffect(() => {
         fetchRooms();
@@ -118,6 +131,7 @@ const Rooms = () => {
             type: 'Dorm',
             capacity: 4,
             price_per_night: '',
+            displayPrice: '',
             description: '',
             gender_restriction: 'Mixed',
             bed_type: 'Single',
@@ -139,7 +153,8 @@ const Rooms = () => {
             name: room.name || '',
             type: room.type || 'Dorm',
             capacity: room.capacity || 4,
-            price_per_night: room.price_per_night || '',
+            price_per_night: parseFloat(room.price_per_night) || 0,
+            displayPrice: numberToInputFormat(room.price_per_night),
             description: room.description || '',
             gender_restriction: room.gender_restriction || 'Mixed',
             bed_type: room.bed_type || 'Single',
@@ -576,14 +591,13 @@ const Rooms = () => {
                                         Preço/Noite (R$) *
                                     </label>
                                     <input
-                                        type="number"
-                                        value={formData.price_per_night}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, price_per_night: e.target.value }))}
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={formData.displayPrice}
+                                        onChange={handlePriceChange}
                                         required
-                                        min="0"
-                                        step="0.01"
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                        placeholder="0.00"
+                                        placeholder="0,00"
                                     />
                                 </div>
                             </div>

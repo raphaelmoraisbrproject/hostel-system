@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { format, addDays, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { COUNTRIES, DOCUMENT_TYPES, GENDERS } from '../constants/countries';
+import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
 
 // Convert countries to react-select format with popular countries first
 const POPULAR_COUNTRIES = ['BR', 'AR', 'US', 'PT', 'ES', 'FR', 'DE', 'GB', 'IT', 'CL', 'CO', 'MX', 'UY', 'PY'];
@@ -88,6 +89,7 @@ const initialFormData = {
     check_in: format(new Date(), 'yyyy-MM-dd'),
     check_out: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
     amount: '',
+    displayAmount: '',
     payment_method: 'Pix'
 };
 
@@ -121,6 +123,17 @@ const Guests = () => {
             setSelectedGuest(null);
         }
     }, []);
+
+    // Currency input handler for guest payment
+    const handleAmountChange = (e) => {
+        const formatted = formatCurrencyInput(e.target.value);
+        const numericValue = parseCurrencyToNumber(formatted);
+        setFormData(prev => ({
+            ...prev,
+            displayAmount: formatted,
+            amount: numericValue
+        }));
+    };
 
     useEffect(() => {
         fetchGuests();
@@ -1021,13 +1034,12 @@ const Guests = () => {
                                     <div>
                                         <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Valor Pago (R$)</label>
                                         <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
+                                            type="text"
+                                            inputMode="numeric"
                                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm placeholder:text-gray-300"
-                                            placeholder="0.00"
-                                            value={formData.amount}
-                                            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                            placeholder="0,00"
+                                            value={formData.displayAmount}
+                                            onChange={handleAmountChange}
                                         />
                                     </div>
                                     <div>

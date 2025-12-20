@@ -5,6 +5,7 @@ import Select from 'react-select';
 import { supabase } from '../lib/supabase';
 import AlertModal from '../components/AlertModal';
 import { COUNTRIES, DOCUMENT_TYPES, GENDERS } from '../constants/countries';
+import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
 
 // Convert countries to react-select format with popular countries first
 const POPULAR_COUNTRIES = ['BR', 'AR', 'US', 'PT', 'ES', 'FR', 'DE', 'GB', 'IT', 'CL', 'CO', 'MX', 'UY', 'PY'];
@@ -128,11 +129,34 @@ const Calendar = () => {
     room_id: '',
     status: 'Confirmed',
     total_amount: '',
+    displayTotalAmount: '',
     paid_amount: 0,
     initial_payment: '',
+    displayInitialPayment: '',
     payment_method: 'Cash',
     booking_notes: ''
   });
+
+  // Currency input handlers
+  const handleTotalAmountChange = (e) => {
+    const formatted = formatCurrencyInput(e.target.value);
+    const numericValue = parseCurrencyToNumber(formatted);
+    setFormData(prev => ({
+      ...prev,
+      displayTotalAmount: formatted,
+      total_amount: numericValue
+    }));
+  };
+
+  const handleInitialPaymentChange = (e) => {
+    const formatted = formatCurrencyInput(e.target.value);
+    const numericValue = parseCurrencyToNumber(formatted);
+    setFormData(prev => ({
+      ...prev,
+      displayInitialPayment: formatted,
+      initial_payment: numericValue
+    }));
+  };
 
   const [conflictWarning, setConflictWarning] = useState(null);
 
@@ -146,8 +170,19 @@ const Calendar = () => {
     isOpen: false,
     room: null,
     date: null,
-    price: ''
+    price: '',
+    displayPrice: ''
   });
+
+  const handlePriceChange = (e) => {
+    const formatted = formatCurrencyInput(e.target.value);
+    const numericValue = parseCurrencyToNumber(formatted);
+    setPriceModal(prev => ({
+      ...prev,
+      displayPrice: formatted,
+      price: numericValue
+    }));
+  };
 
   // Alert Modal State
   const [alertModal, setAlertModal] = useState({
@@ -879,12 +914,14 @@ const Calendar = () => {
   };
 
   const handlePriceEdit = (row, date, currentRate) => {
-    const defaultPrice = rooms.find(r => r.id === row.id)?.price_per_night || '';
+    const defaultPrice = rooms.find(r => r.id === row.id)?.price_per_night || 0;
+    const price = currentRate || defaultPrice;
     setPriceModal({
       isOpen: true,
       room: row,
       date: date,
-      price: currentRate || defaultPrice
+      price: parseFloat(price) || 0,
+      displayPrice: numberToInputFormat(price)
     });
   };
 
@@ -950,9 +987,11 @@ const Calendar = () => {
       check_out: booking.check_out_date,
       room_id: booking.bed_id || booking.room_id || '',
       status: booking.status,
-      total_amount: booking.total_amount,
+      total_amount: parseFloat(booking.total_amount) || 0,
+      displayTotalAmount: numberToInputFormat(booking.total_amount),
       paid_amount: parseFloat(booking.paid_amount || 0),
-      initial_payment: booking.paid_amount || '',
+      initial_payment: parseFloat(booking.paid_amount) || 0,
+      displayInitialPayment: numberToInputFormat(booking.paid_amount),
       payment_method: 'Cash',
       booking_notes: booking.notes || ''
     });
@@ -982,8 +1021,10 @@ const Calendar = () => {
       room_id: '',
       status: 'Confirmed',
       total_amount: '',
+      displayTotalAmount: '',
       paid_amount: 0,
       initial_payment: '',
+      displayInitialPayment: '',
       payment_method: 'Cash',
       booking_notes: ''
     });
@@ -1087,8 +1128,10 @@ const Calendar = () => {
       room_id: resourceId,
       status: 'Confirmed',
       total_amount: '',
+      displayTotalAmount: '',
       paid_amount: 0,
       initial_payment: '',
+      displayInitialPayment: '',
       payment_method: 'Cash',
       booking_notes: ''
     });
@@ -2116,7 +2159,7 @@ const Calendar = () => {
                     )}
                     <div>
                       <span className="text-[10px] font-bold text-gray-400 uppercase block">Total</span>
-                      <span className="text-xl font-black text-emerald-600">R${formData.total_amount}</span>
+                      <span className="text-xl font-black text-emerald-600">{formatCurrency(formData.total_amount)}</span>
                     </div>
                   </div>
                 </div>
@@ -2124,13 +2167,12 @@ const Calendar = () => {
                   <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Valor Pago (R$)</label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="numeric"
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-bold placeholder:text-gray-300"
-                      placeholder="0.00"
-                      value={formData.initial_payment}
-                      onChange={(e) => setFormData({ ...formData, initial_payment: e.target.value })}
+                      placeholder="0,00"
+                      value={formData.displayInitialPayment}
+                      onChange={handleInitialPaymentChange}
                     />
                     {/* Show remaining balance */}
                     {(() => {
@@ -2142,7 +2184,7 @@ const Calendar = () => {
                         return (
                           <div className="mt-2 text-sm">
                             <span className="text-red-500">Pendente: </span>
-                            <span className="font-bold text-red-600">R${remaining.toFixed(2)}</span>
+                            <span className="font-bold text-red-600">{formatCurrency(remaining)}</span>
                           </div>
                         );
                       } else if (totalPaid >= totalAmount && totalAmount > 0) {
@@ -2237,11 +2279,12 @@ const Calendar = () => {
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">R$</span>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={priceModal.price}
-                  onChange={(e) => setPriceModal({ ...priceModal, price: e.target.value })}
+                  type="text"
+                  inputMode="numeric"
+                  value={priceModal.displayPrice}
+                  onChange={handlePriceChange}
                   className="w-full pl-10 pr-4 py-2.5 sm:py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-gray-800"
+                  placeholder="0,00"
                   autoFocus
                 />
               </div>

@@ -4,6 +4,7 @@ import { ptBR } from 'date-fns/locale';
 import { Search, Filter, Calendar, User, Bed, X, Eye, Edit2, FileText, Mail, Phone, DollarSign, AlertCircle, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AlertModal from '../components/AlertModal';
+import { formatCurrencyInput, parseCurrencyToNumber, formatCurrency, numberToInputFormat } from '../utils/currency';
 
 const Bookings = () => {
   const [bookings, setBookings] = useState([]);
@@ -28,9 +29,32 @@ const Bookings = () => {
   const [editForm, setEditForm] = useState({
     status: '',
     total_amount: '',
+    displayTotalAmount: '',
     paid_amount: '',
+    displayPaidAmount: '',
     notes: ''
   });
+
+  // Currency input handlers for Bookings
+  const handleTotalAmountChange = (e) => {
+    const formatted = formatCurrencyInput(e.target.value);
+    const numericValue = parseCurrencyToNumber(formatted);
+    setEditForm(prev => ({
+      ...prev,
+      displayTotalAmount: formatted,
+      total_amount: numericValue
+    }));
+  };
+
+  const handlePaidAmountChange = (e) => {
+    const formatted = formatCurrencyInput(e.target.value);
+    const numericValue = parseCurrencyToNumber(formatted);
+    setEditForm(prev => ({
+      ...prev,
+      displayPaidAmount: formatted,
+      paid_amount: numericValue
+    }));
+  };
 
   useEffect(() => {
     fetchBookings();
@@ -191,8 +215,10 @@ const Bookings = () => {
   const openEditModal = (booking) => {
     setEditForm({
       status: booking.status,
-      total_amount: booking.total_amount || '',
-      paid_amount: booking.paid_amount || '',
+      total_amount: parseFloat(booking.total_amount) || 0,
+      displayTotalAmount: numberToInputFormat(booking.total_amount),
+      paid_amount: parseFloat(booking.paid_amount) || 0,
+      displayPaidAmount: numberToInputFormat(booking.paid_amount),
       notes: booking.notes || ''
     });
     setEditModal({ isOpen: true, booking });
@@ -650,10 +676,11 @@ const Bookings = () => {
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor Total (R$)</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={editForm.total_amount}
-                  onChange={(e) => setEditForm({ ...editForm, total_amount: e.target.value })}
+                  type="text"
+                  inputMode="numeric"
+                  value={editForm.displayTotalAmount}
+                  onChange={handleTotalAmountChange}
+                  placeholder="0,00"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-gray-50"
                 />
               </div>
@@ -662,10 +689,11 @@ const Bookings = () => {
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Valor Pago (R$)</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={editForm.paid_amount}
-                  onChange={(e) => setEditForm({ ...editForm, paid_amount: e.target.value })}
+                  type="text"
+                  inputMode="numeric"
+                  value={editForm.displayPaidAmount}
+                  onChange={handlePaidAmountChange}
+                  placeholder="0,00"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-gray-50"
                 />
                 {/* Balance indicator */}
@@ -674,9 +702,9 @@ const Bookings = () => {
                   const paid = parseFloat(editForm.paid_amount) || 0;
                   const diff = total - paid;
                   if (diff > 0) {
-                    return <p className="text-xs text-red-600 mt-1">Pendente: R$ {diff.toFixed(2)}</p>;
+                    return <p className="text-xs text-red-600 mt-1">Pendente: {formatCurrency(diff)}</p>;
                   } else if (diff < 0) {
-                    return <p className="text-xs text-amber-600 mt-1">Excedente: R$ {Math.abs(diff).toFixed(2)}</p>;
+                    return <p className="text-xs text-amber-600 mt-1">Excedente: {formatCurrency(Math.abs(diff))}</p>;
                   } else if (total > 0) {
                     return <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1"><Check size={12} /> Pago integralmente</p>;
                   }
