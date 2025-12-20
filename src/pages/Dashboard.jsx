@@ -209,117 +209,79 @@ const Dashboard = () => {
         </button>
       </div>
 
-      {/* Alerts Section - Modern Cards */}
+      {/* Alerts Section - Compact Cards */}
       {hasAlerts && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Pagamentos Pendentes Card */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Pagamentos Pendentes */}
           {stats.pendingPayments.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-red-500 to-rose-500 px-5 py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/20 rounded-lg">
-                      <Wallet size={20} className="text-white" />
-                    </div>
-                    <div>
-                      <p className="text-red-100 text-sm font-medium">Pagamentos Pendentes</p>
-                      <p className="text-white text-2xl font-bold">{formatCurrency(stats.totalPending)}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                      {stats.pendingPayments.length} {stats.pendingPayments.length === 1 ? 'hóspede' : 'hóspedes'}
-                    </span>
-                  </div>
+            <div className="bg-white rounded-lg border border-red-200 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-red-50 border-b border-red-100">
+                <div className="flex items-center gap-2">
+                  <Wallet size={14} className="text-red-500" />
+                  <span className="text-xs font-semibold text-red-700">Pagamentos Pendentes</span>
                 </div>
+                <span className="text-xs font-bold text-red-600">{formatCurrency(stats.totalPending)}</span>
               </div>
-              <div className="p-4">
-                <div className="space-y-3">
-                  {stats.pendingPayments.slice(0, 3).map(b => (
-                    <div key={b.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-                      <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-red-600 font-bold text-sm">
-                          {b.guests?.full_name?.charAt(0)?.toUpperCase() || '?'}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-gray-900 font-medium text-sm truncate">{b.guests?.full_name}</p>
-                        <p className="text-gray-500 text-xs truncate">
-                          {b.rooms?.name}{b.beds?.bed_number ? ` • Cama ${b.beds.bed_number}` : ''}
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-red-600 font-bold text-sm">{formatCurrency(b.pending)}</p>
-                      </div>
+              <div className="divide-y divide-gray-100">
+                {stats.pendingPayments.slice(0, 3).map(b => (
+                  <div key={b.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{b.guests?.full_name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {b.rooms?.name}{b.beds?.bed_number ? ` • Cama ${b.beds.bed_number}` : ''}
+                      </p>
                     </div>
-                  ))}
-                </div>
-                {stats.pendingPayments.length > 3 && (
-                  <button
-                    onClick={() => navigate('/bookings')}
-                    className="w-full mt-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg font-medium flex items-center justify-center gap-1 transition-colors"
-                  >
-                    Ver todos ({stats.pendingPayments.length}) <ArrowRight size={14} />
-                  </button>
-                )}
+                    <span className="text-sm font-semibold text-red-600 ml-2">{formatCurrency(b.pending)}</span>
+                  </div>
+                ))}
               </div>
+              {stats.pendingPayments.length > 3 && (
+                <button
+                  onClick={() => navigate('/bookings')}
+                  className="w-full py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium flex items-center justify-center gap-1 border-t border-gray-100"
+                >
+                  +{stats.pendingPayments.length - 3} mais <ArrowRight size={12} />
+                </button>
+              )}
             </div>
           )}
 
-          {/* Check-outs Hoje Card */}
+          {/* Check-outs Hoje */}
           {stats.todayCheckOuts.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white/20 rounded-lg">
-                      <LogOut size={20} className="text-white" />
-                    </div>
-                    <div>
-                      <p className="text-orange-100 text-sm font-medium">Check-outs Hoje</p>
-                      <p className="text-white text-2xl font-bold">{stats.todayCheckOuts.length} {stats.todayCheckOuts.length === 1 ? 'hóspede' : 'hóspedes'}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-                      Aguardando saída
-                    </span>
-                  </div>
+            <div className="bg-white rounded-lg border border-orange-200 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-orange-50 border-b border-orange-100">
+                <div className="flex items-center gap-2">
+                  <LogOut size={14} className="text-orange-500" />
+                  <span className="text-xs font-semibold text-orange-700">Check-outs Hoje</span>
                 </div>
+                <span className="text-xs font-bold text-orange-600">{stats.todayCheckOuts.length} hóspedes</span>
               </div>
-              <div className="p-4">
-                <div className="space-y-3">
-                  {stats.todayCheckOuts.slice(0, 3).map(b => (
-                    <div key={b.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-                      <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <span className="text-orange-600 font-bold text-sm">
-                          {b.guests?.full_name?.charAt(0)?.toUpperCase() || '?'}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-gray-900 font-medium text-sm truncate">{b.guests?.full_name}</p>
-                        <p className="text-gray-500 text-xs truncate">
-                          {b.rooms?.name}{b.beds?.bed_number ? ` • Cama ${b.beds.bed_number}` : ''}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => navigate('/calendar')}
-                        className="px-3 py-1.5 bg-orange-100 hover:bg-orange-200 text-orange-700 text-xs font-medium rounded-lg transition-colors flex-shrink-0"
-                      >
-                        Check-out
-                      </button>
+              <div className="divide-y divide-gray-100">
+                {stats.todayCheckOuts.slice(0, 3).map(b => (
+                  <div key={b.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{b.guests?.full_name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {b.rooms?.name}{b.beds?.bed_number ? ` • Cama ${b.beds.bed_number}` : ''}
+                      </p>
                     </div>
-                  ))}
-                </div>
-                {stats.todayCheckOuts.length > 3 && (
-                  <button
-                    onClick={() => navigate('/calendar')}
-                    className="w-full mt-3 py-2 text-sm text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg font-medium flex items-center justify-center gap-1 transition-colors"
-                  >
-                    Ver todos ({stats.todayCheckOuts.length}) <ArrowRight size={14} />
-                  </button>
-                )}
+                    <button
+                      onClick={() => navigate('/calendar')}
+                      className="text-xs text-orange-600 hover:text-orange-700 font-medium ml-2"
+                    >
+                      Check-out →
+                    </button>
+                  </div>
+                ))}
               </div>
+              {stats.todayCheckOuts.length > 3 && (
+                <button
+                  onClick={() => navigate('/calendar')}
+                  className="w-full py-1.5 text-xs text-orange-600 hover:bg-orange-50 font-medium flex items-center justify-center gap-1 border-t border-gray-100"
+                >
+                  +{stats.todayCheckOuts.length - 3} mais <ArrowRight size={12} />
+                </button>
+              )}
             </div>
           )}
         </div>
