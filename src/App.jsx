@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Rooms from './pages/Rooms';
 import Calendar from './pages/Calendar';
 import Bookings from './pages/Bookings';
@@ -20,6 +21,7 @@ function App() {
         <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register/:token" element={<Register />} />
           <Route path="/" element={
             <ProtectedRoute>
               <Layout><Dashboard /></Layout>
