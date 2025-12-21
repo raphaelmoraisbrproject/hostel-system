@@ -10,7 +10,7 @@ import Calendar from './pages/Calendar';
 import Bookings from './pages/Bookings';
 import Guests from './pages/Guests';
 import Finance from './pages/Finance';
-import Settings from './pages/Settings';
+import Organization from './pages/Organization';
 import './i18n';
 
 function App() {
@@ -50,9 +50,9 @@ function App() {
               <Layout><Finance /></Layout>
             </ProtectedRoute>
           } />
-          <Route path="/settings" element={
+          <Route path="/organization" element={
             <ProtectedRoute>
-              <Layout><Settings /></Layout>
+              <Layout><Organization /></Layout>
             </ProtectedRoute>
           } />
         </Routes>

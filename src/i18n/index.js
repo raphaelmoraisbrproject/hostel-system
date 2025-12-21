@@ -11,6 +11,7 @@ const resources = {
             "rooms": "Rooms",
             "finance": "Finance",
             "settings": "Settings",
+            "organization": "Organization",
             "login": "Login",
             "logout": "Logout"
         }
@@ -23,6 +24,7 @@ const resources = {
             "rooms": "Quartos",
             "finance": "Financeiro",
             "settings": "Configurações",
+            "organization": "Organização",
             "login": "Entrar",
             "logout": "Sair"
         }
@@ -35,6 +37,7 @@ const resources = {
             "rooms": "Habitaciones",
             "finance": "Finanzas",
             "settings": "Ajustes",
+            "organization": "Organización",
             "login": "Entrar",
             "logout": "Salir"
         }

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Settings as SettingsIcon, DollarSign, Check, Globe } from 'lucide-react';
+import { Building2, DollarSign, Check, Globe } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { CURRENCIES } from '../constants/currencies';
 import { useCurrency } from '../hooks/useCurrency';
 
-const Settings = () => {
+const Organization = () => {
   const { currency, updateCurrency, loading } = useSettings();
   const { formatCurrency } = useCurrency();
   const [saving, setSaving] = useState(false);
@@ -44,10 +44,10 @@ const Settings = () => {
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="p-2 bg-emerald-100 rounded-lg">
-          <SettingsIcon size={24} className="text-emerald-600" />
+          <Building2 size={24} className="text-emerald-600" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Organização</h1>
           <p className="text-gray-500">Gerencie as configurações do sistema</p>
         </div>
       </div>
@@ -143,4 +143,4 @@ const Settings = () => {
   );
 };
 
-export default Settings;
+export default Organization;
