@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { useNavigate, Link } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
 
 const Login = () => {
     const { signIn } = useAuth();
     const navigate = useNavigate();
-    const { t } = useTranslation();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -81,6 +79,15 @@ const Login = () => {
                                 </>
                             )}
                         </button>
+
+                        <div className="text-center">
+                            <Link
+                                to="/forgot-password"
+                                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                            >
+                                Esqueci minha senha
+                            </Link>
+                        </div>
                     </form>
                 </div>
                 <div className="bg-gray-50 p-4 text-center text-sm text-gray-500 border-t border-gray-100">
