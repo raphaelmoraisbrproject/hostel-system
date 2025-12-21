@@ -21,10 +21,12 @@ const Organization = () => {
   const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
-    fetchUserProfile();
-    fetchTeamData();
+    if (user?.id) {
+      fetchUserProfile();
+      fetchTeamData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
 
   const fetchUserProfile = async () => {
     try {

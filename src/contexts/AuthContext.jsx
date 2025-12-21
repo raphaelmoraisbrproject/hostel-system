@@ -95,15 +95,23 @@ export const AuthProvider = ({ children }) => {
     };
 
     const getInvites = async () => {
-        const { data, error } = await supabase
-            .from('user_invites')
-            .select('*')
-            .is('used_at', null)
-            .gt('expires_at', new Date().toISOString())
-            .order('created_at', { ascending: false });
+        try {
+            const { data, error } = await supabase
+                .from('user_invites')
+                .select('*')
+                .is('used_at', null)
+                .gt('expires_at', new Date().toISOString())
+                .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        return data;
+            if (error) {
+                console.error('Error fetching invites:', error);
+                return [];
+            }
+            return data || [];
+        } catch (err) {
+            console.error('Error in getInvites:', err);
+            return [];
+        }
     };
 
     const cancelInvite = async (inviteId) => {
