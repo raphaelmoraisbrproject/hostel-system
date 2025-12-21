@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, differenceInDays, startOfMonth, endOfMonth, startOfDay } from 'date-fns';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { format, addDays, eachDayOfInterval, isSameDay, parseISO, differenceInDays, startOfDay } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Bed, User, Check, X, Mail, AlertCircle, Phone, ShowerHead, Lock } from 'lucide-react';
 import Select from 'react-select';
 import { supabase } from '../lib/supabase';
@@ -7,6 +7,7 @@ import AlertModal from '../components/AlertModal';
 import { COUNTRIES, DOCUMENT_TYPES, GENDERS } from '../constants/countries';
 import { formatCurrencyInput, parseCurrencyToNumber, numberToInputFormat } from '../utils/currency';
 import { useCurrency } from '../hooks/useCurrency';
+import { BookingBar, LockBar, DateCell, RowSidebar } from '../components/calendar';
 
 // Convert countries to react-select format with popular countries first
 const POPULAR_COUNTRIES = ['BR', 'AR', 'US', 'PT', 'ES', 'FR', 'DE', 'GB', 'IT', 'CL', 'CO', 'MX', 'UY', 'PY'];
@@ -104,7 +105,6 @@ const Calendar = () => {
   const sidebarWidth = isMobile ? SIDEBAR_WIDTH_MOBILE : SIDEBAR_WIDTH;
   const [rooms, setRooms] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dailyRates, setDailyRates] = useState([]);
 
@@ -140,16 +140,6 @@ const Calendar = () => {
   });
 
   // Currency input handlers
-  const handleTotalAmountChange = (e) => {
-    const formatted = formatCurrencyInput(e.target.value);
-    const numericValue = parseCurrencyToNumber(formatted);
-    setFormData(prev => ({
-      ...prev,
-      displayTotalAmount: formatted,
-      total_amount: numericValue
-    }));
-  };
-
   const handleInitialPaymentChange = (e) => {
     const formatted = formatCurrencyInput(e.target.value);
     const numericValue = parseCurrencyToNumber(formatted);
@@ -242,11 +232,11 @@ const Calendar = () => {
     description: ''
   });
 
-  // Generate dates for the view (3 months = ~90 days)
-  const dates = eachDayOfInterval({
+  // Generate dates for the view (3 months = ~90 days) - memoized to avoid recreation on every render
+  const dates = useMemo(() => eachDayOfInterval({
     start: startDate,
     end: addDays(startDate, 89) // Show 90 days (3 months)
-  });
+  }), [startDate]);
 
   useEffect(() => {
     fetchData();
@@ -458,75 +448,65 @@ const Calendar = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Rooms and Beds (only active rooms)
-      const { data: roomsData, error: roomsError } = await supabase
-        .from('rooms')
-        .select(`
-          *,
-          beds (*)
-        `)
-        .eq('is_active', true)
-        .is('deleted_at', null)
-        .order('name');
+      const rangeStart = format(startDate, 'yyyy-MM-dd');
+      const rangeEnd = format(addDays(startDate, 90), 'yyyy-MM-dd');
 
-      if (roomsError) throw roomsError;
+      // Execute all queries in parallel for faster loading
+      const [roomsResult, bookingsResult, ratesResult, locksResult] = await Promise.all([
+        // 1. Fetch Rooms and Beds (only active rooms)
+        supabase
+          .from('rooms')
+          .select(`*, beds (*)`)
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .order('name'),
+
+        // 2. Fetch Bookings for the date range (90 days)
+        supabase
+          .from('bookings')
+          .select(`
+            *,
+            guests (
+              id, full_name, email, phone, nationality, passport_id,
+              document_type, gender, date_of_birth,
+              emergency_contact_name, emergency_contact_phone, notes
+            )
+          `)
+          .lt('check_in_date', rangeEnd)
+          .gt('check_out_date', rangeStart),
+
+        // 3. Fetch Daily Rates
+        supabase
+          .from('daily_rates')
+          .select('*')
+          .gte('date', rangeStart)
+          .lte('date', rangeEnd),
+
+        // 4. Fetch Date Locks
+        supabase
+          .from('date_locks')
+          .select('*')
+          .lt('start_date', rangeEnd)
+          .gt('end_date', rangeStart)
+      ]);
+
+      // Check for errors
+      if (roomsResult.error) throw roomsResult.error;
+      if (bookingsResult.error) throw bookingsResult.error;
+      if (ratesResult.error) throw ratesResult.error;
+      if (locksResult.error) throw locksResult.error;
 
       // Filter out inactive beds (status !== 'Active')
-      const roomsWithActiveBeds = (roomsData || []).map(room => ({
+      const roomsWithActiveBeds = (roomsResult.data || []).map(room => ({
         ...room,
         beds: room.beds?.filter(bed => bed.status === 'Active') || []
       }));
 
+      // Update all states
       setRooms(roomsWithActiveBeds);
-
-      // 2. Fetch Bookings for the date range (90 days)
-      const rangeStart = format(startDate, 'yyyy-MM-dd');
-      const rangeEnd = format(addDays(startDate, 90), 'yyyy-MM-dd');
-
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          guests (
-            id,
-            full_name,
-            email,
-            phone,
-            nationality,
-            passport_id,
-            document_type,
-            gender,
-            date_of_birth,
-            emergency_contact_name,
-            emergency_contact_phone,
-            notes
-          )
-        `)
-        .lt('check_in_date', rangeEnd)
-        .gt('check_out_date', rangeStart);
-
-      if (bookingsError) throw bookingsError;
-      setBookings(bookingsData || []);
-
-      // 3. Fetch Daily Rates
-      const { data: ratesData, error: ratesError } = await supabase
-        .from('daily_rates')
-        .select('*')
-        .gte('date', rangeStart)
-        .lte('date', rangeEnd);
-
-      if (ratesError) throw ratesError;
-      setDailyRates(ratesData || []);
-
-      // 4. Fetch Date Locks
-      const { data: locksData, error: locksError } = await supabase
-        .from('date_locks')
-        .select('*')
-        .lt('start_date', rangeEnd)
-        .gt('end_date', rangeStart);
-
-      if (locksError) throw locksError;
-      setDateLocks(locksData || []);
+      setBookings(bookingsResult.data || []);
+      setDailyRates(ratesResult.data || []);
+      setDateLocks(locksResult.data || []);
 
     } catch (error) {
       console.error('Error fetching calendar data:', error);
@@ -669,88 +649,147 @@ const Calendar = () => {
     }
   };
 
-  // Prepare rows for the calendar (Rooms and Beds)
-  const rows = [];
-  (rooms || []).forEach(room => {
-    // Build room display name with gender and bathroom info
-    let roomDisplayName = room.name;
-    // Add gender tag: (F) for Female, (M) for Male, nothing for Mixed
-    if (room.gender_restriction === 'Female') {
-      roomDisplayName = `${room.name} (F)`;
-    } else if (room.gender_restriction === 'Male') {
-      roomDisplayName = `${room.name} (M)`;
-    }
-    // Bathroom icon will be shown separately in the row
+  // Prepare rows for the calendar (Rooms and Beds) - memoized to avoid recreation on every render
+  const rows = useMemo(() => {
+    const result = [];
+    (rooms || []).forEach(room => {
+      // Build room display name with gender and bathroom info
+      let roomDisplayName = room.name;
+      // Add gender tag: (F) for Female, (M) for Male, nothing for Mixed
+      if (room.gender_restriction === 'Female') {
+        roomDisplayName = `${room.name} (F)`;
+      } else if (room.gender_restriction === 'Male') {
+        roomDisplayName = `${room.name} (M)`;
+      }
+      // Bathroom icon will be shown separately in the row
 
-    // Add Room Header (Price only, no bookings)
-    rows.push({
-      id: room.id,
-      name: roomDisplayName,
-      type: 'room',
-      capacity: room.capacity,
-      isPrivate: room.type !== 'Dorm',
-      room_id: room.id, // for pricing lookups
-      has_bathroom: room.has_bathroom
+      // Add Room Header (Price only, no bookings)
+      result.push({
+        id: room.id,
+        name: roomDisplayName,
+        type: 'room',
+        capacity: room.capacity,
+        isPrivate: room.type !== 'Dorm',
+        room_id: room.id, // for pricing lookups
+        has_bathroom: room.has_bathroom
+      });
+
+      // If NOT Dorm (Private, Family, Suite, Double, etc.), add a Row for the actual booking
+      if (room.type !== 'Dorm') {
+        result.push({
+          id: `booking-${room.id}`,
+          parentId: room.id,
+          name: `${room.type} • ${room.capacity} Pers`,
+          type: 'room_booking',
+          isPrivate: true
+        });
+      }
+
+      // If Dorm, add Beds as sub-rows
+      if (room.type === 'Dorm' && room.beds) {
+        room.beds.sort((a, b) => {
+          // Human sort for bed numbers
+          return a.bed_number.localeCompare(b.bed_number, undefined, { numeric: true, sensitivity: 'base' });
+        }).forEach(bed => {
+          result.push({
+            id: bed.id,
+            parentId: room.id,
+            name: `Bed ${bed.bed_number}`,
+            type: 'bed'
+          });
+        });
+      }
+    });
+    return result;
+  }, [rooms]);
+
+  // ============================================================================
+  // PHASE 2: Pre-computed Maps for O(1) lookups
+  // ============================================================================
+
+  // Bloco 2.1: Map de bookings por resource (bed_id ou room_id)
+  // Substitui: bookings.filter(b => b.bed_id === row.id)
+  const bookingsMap = useMemo(() => {
+    const map = new Map();
+
+    bookings.forEach(b => {
+      // Skip cancelled bookings
+      if (b.status === 'Cancelled') return;
+
+      // Bookings com bed_id (camas específicas)
+      if (b.bed_id) {
+        const key = `bed-${b.bed_id}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(b);
+      }
+
+      // Bookings de quarto inteiro (sem bed_id)
+      if (!b.bed_id && b.room_id) {
+        const key = `room-${b.room_id}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(b);
+      }
     });
 
-    // If NOT Dorm (Private, Family, Suite, Double, etc.), add a Row for the actual booking
-    if (room.type !== 'Dorm') {
-      rows.push({
-        id: `booking-${room.id}`,
-        parentId: room.id,
-        name: `${room.type} • ${room.capacity} Pers`,
-        type: 'room_booking',
-        isPrivate: true
-      });
-    }
+    return map;
+  }, [bookings]);
 
-    // If Dorm, add Beds as sub-rows
-    if (room.type === 'Dorm' && room.beds) {
-      room.beds.sort((a, b) => {
-        // Human sort for bed numbers
-        return a.bed_number.localeCompare(b.bed_number, undefined, { numeric: true, sensitivity: 'base' });
-      }).forEach(bed => {
-        rows.push({
-          id: bed.id,
-          parentId: room.id,
-          name: `Bed ${bed.bed_number}`,
-          type: 'bed'
-        });
-      });
-    }
-  });
+  // Bloco 2.2: Map de locks por resource
+  // Substitui: dateLocks.filter(lock => lock.bed_id === row.id)
+  const locksMap = useMemo(() => {
+    const map = new Map();
+
+    dateLocks.forEach(lock => {
+      // Locks com bed_id (camas específicas)
+      if (lock.bed_id) {
+        const key = `bed-${lock.bed_id}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(lock);
+      }
+
+      // Locks de quarto inteiro (sem bed_id)
+      if (!lock.bed_id && lock.room_id) {
+        const key = `room-${lock.room_id}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(lock);
+      }
+    });
+
+    return map;
+  }, [dateLocks]);
+
+  // Bloco 2.3: Map de rates por room/date
+  // Substitui: dailyRates.find(r => r.room_id === roomId && r.date === date)
+  const ratesMap = useMemo(() => {
+    const map = new Map();
+
+    dailyRates.forEach(rate => {
+      map.set(`${rate.room_id}-${rate.date}`, rate.price);
+    });
+
+    return map;
+  }, [dailyRates]);
 
   const getResourceBookings = (row, type) => {
-    return bookings.filter(b => {
-      // Hide cancelled bookings from calendar
-      if (b.status === 'Cancelled') return false;
+    // Room Header rows (type 'room') never show bookings
+    if (type === 'room') return [];
 
-      // Room Header rows (type 'room') never show bookings
-      if (type === 'room') return false;
+    // Determinar a chave baseada no tipo
+    const key = type === 'bed' ? `bed-${row.id}` : `room-${row.parentId}`;
 
-      // Bed rows show bookings linked to that bed
-      if (type === 'bed') return b.bed_id === row.id;
-
-      // room_booking rows show bookings linked to the room (without a specific bed)
-      if (type === 'room_booking') return b.room_id === row.parentId && !b.bed_id;
-
-      return false;
-    });
+    // O(1) lookup no Map pré-computado
+    return bookingsMap.get(key) || [];
   };
 
   const getResourceLocks = (row, type) => {
-    return dateLocks.filter(lock => {
-      // Room Header rows (type 'room') never show locks
-      if (type === 'room') return false;
+    // Room Header rows (type 'room') never show locks
+    if (type === 'room') return [];
 
-      // Bed rows show locks linked to that bed
-      if (type === 'bed') return lock.bed_id === row.id;
+    // Determinar a chave baseada no tipo
+    const key = type === 'bed' ? `bed-${row.id}` : `room-${row.parentId}`;
 
-      // room_booking rows show locks linked to the room (without a specific bed)
-      if (type === 'room_booking') return lock.room_id === row.parentId && !lock.bed_id;
-
-      return false;
-    });
+    // O(1) lookup no Map pré-computado
+    return locksMap.get(key) || [];
   };
 
   const getLockBarStyle = (lock) => {
@@ -817,13 +856,6 @@ const Calendar = () => {
     };
   };
 
-  const getLockColor = (lockType) => {
-    switch (lockType) {
-      case 'Voluntariado': return 'bg-purple-500 hover:bg-purple-600 border-purple-600';
-      case 'Manutenção': return 'bg-orange-500 hover:bg-orange-600 border-orange-600';
-      default: return 'bg-gray-500 hover:bg-gray-600 border-gray-600';
-    }
-  };
 
   const getBarStyle = (booking) => {
     const start = parseISO(booking.check_in_date);
@@ -867,7 +899,12 @@ const Calendar = () => {
     if (isClippedLeft) width += cellWidth / 2;
     if (isClippedRight) width += cellWidth / 2;
 
-    // Adjust clip-path based on clipping
+    // Adjust clip-path based on clipping and duration
+    // Shorter stays get smaller slant angles to maximize text space
+    const isVeryShortBooking = durationDays === 1;
+    const isShortBooking = durationDays <= 2;
+    const slantSize = isVeryShortBooking ? '12px' : isShortBooking ? '18px' : '25px';
+
     // Normal: / / (slanted both sides)
     // Clipped left: | / (flat left, slanted right)
     // Clipped right: / | (slanted left, flat right)
@@ -876,11 +913,11 @@ const Calendar = () => {
     if (isClippedLeft && isClippedRight) {
       clipPath = 'none'; // Rectangle
     } else if (isClippedLeft) {
-      clipPath = 'polygon(0 0, 100% 0, calc(100% - 25px) 100%, 0 100%)'; // Flat left
+      clipPath = `polygon(0 0, 100% 0, calc(100% - ${slantSize}) 100%, 0 100%)`; // Flat left
     } else if (isClippedRight) {
-      clipPath = 'polygon(25px 0, 100% 0, 100% 100%, 0 100%)'; // Flat right
+      clipPath = `polygon(${slantSize} 0, 100% 0, 100% 100%, 0 100%)`; // Flat right
     } else {
-      clipPath = 'polygon(25px 0, 100% 0, calc(100% - 25px) 100%, 0 100%)'; // Normal
+      clipPath = `polygon(${slantSize} 0, 100% 0, calc(100% - ${slantSize}) 100%, 0 100%)`; // Normal
     }
 
     // Responsive vertical positioning (smaller rows now)
@@ -895,24 +932,17 @@ const Calendar = () => {
       zIndex: 1,
       clipPath,
       isClippedLeft,
-      isClippedRight
+      isClippedRight,
+      isVeryShortBooking
     };
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Confirmed': return 'bg-blue-500 hover:bg-blue-600 border-blue-600 text-white'; // Reservado
-      case 'Checked-in': return 'bg-emerald-500 hover:bg-emerald-600 border-emerald-600 text-white'; // Check-in
-      case 'Checked-out': return 'bg-gray-400 hover:bg-gray-500 border-gray-500 text-white'; // Check-out
-      case 'Cancelled': return 'bg-red-400 hover:bg-red-500 border-red-500 text-white'; // Cancelado
-      default: return 'bg-blue-500 text-white';
-    }
-  };
 
   const getDailyRate = (roomId, date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
-    const rate = dailyRates.find(r => r.room_id === roomId && r.date === dateStr);
-    return rate ? rate.price : null;
+
+    // O(1) lookup no Map pré-computado
+    return ratesMap.get(`${roomId}-${dateStr}`) || null;
   };
 
   const handlePriceEdit = (row, date, currentRate) => {
@@ -1670,43 +1700,7 @@ const Calendar = () => {
                 className={`flex border-b border-gray-200 hover:bg-gray-50/50 transition-colors ${rowHeight} ${rowBg}`}
               >
                 {/* Sidebar Cell */}
-                <div
-                  className={`sticky left-0 z-20 border-r border-gray-200 flex-shrink-0 flex items-center px-2 sm:px-3 justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)] ${row.type === 'header' ? 'bg-gray-100 text-gray-600' : row.type === 'room' ? 'bg-slate-50' : 'bg-white'}`}
-                  style={{ width: sidebarWidth }}
-                >
-                  <div className="flex items-center gap-1 sm:gap-2 overflow-hidden">
-                    {row.type === 'header' && (
-                      <span className="font-bold text-xs sm:text-sm truncate">{row.name}</span>
-                    )}
-                    {row.type === 'room' && (
-                      <>
-                        <div className="w-1 h-5 sm:h-6 bg-purple-500 rounded-full flex-shrink-0"></div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1">
-                            <span className="font-bold text-gray-800 text-[11px] sm:text-sm truncate">{row.name}</span>
-                            {row.has_bathroom && <ShowerHead size={11} className="text-blue-500 flex-shrink-0" />}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {row.type === 'room_booking' && (
-                      <>
-                        <div className="w-4 sm:w-5 ml-2 sm:ml-3 flex justify-center opacity-50">
-                          <Bed size={11} className="text-gray-400" />
-                        </div>
-                        <span className="text-[9px] sm:text-[11px] font-medium text-gray-400 italic truncate">{row.name}</span>
-                      </>
-                    )}
-                    {row.type === 'bed' && (
-                      <>
-                        <div className="w-4 sm:w-5 ml-2 sm:ml-3 flex justify-center">
-                          <Bed size={12} className="text-gray-400" />
-                        </div>
-                        <span className="text-[10px] sm:text-xs font-medium text-gray-600 truncate">{row.name}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+                <RowSidebar row={row} sidebarWidth={sidebarWidth} />
 
                 {/* Timeline Cells */}
                 <div className="flex relative isolate" onDragEnd={handleDragEnd}>
@@ -1718,156 +1712,65 @@ const Calendar = () => {
                     const isSelected = isCellInSelection(row, date);
                     const isClickable = row.type === 'bed' || row.type === 'room_booking';
 
+                    const handleClick = (e) => {
+                      if (isRoomHeader) {
+                        handlePriceEdit(row, date, rate);
+                      } else if (isClickable) {
+                        handleCellClick(e, row, date);
+                      }
+                    };
+
                     return (
                       <div
                         key={date.toString()}
-                        className={`flex-shrink-0 border-r h-full flex items-center justify-center transition-all
-                          ${isRoomHeader ? 'hover:bg-emerald-50 cursor-pointer' : ''}
-                          ${isClickable ? 'hover:bg-blue-50 cursor-pointer' : ''}
-                          ${isToday ? 'bg-emerald-50 border-emerald-200' : 'border-gray-300'}
-                          ${isSelected ? 'bg-blue-200 ring-2 ring-blue-400 ring-inset' : ''}
-                        `}
-                        style={{ width: cellWidth }}
-                        onClick={(e) => {
-                          if (isRoomHeader) {
-                            handlePriceEdit(row, date, rate);
-                          } else if (isClickable) {
-                            handleCellClick(e, row, date);
-                          }
-                        }}
                         onDragOver={(e) => handleDragOver(e, date)}
                         onDrop={handleDrop}
                       >
-                        {isRoomHeader && (
-                          <span className="text-[9px] sm:text-[11px] font-bold text-emerald-700">
-                            ${rate || rooms.find(r => r.id === row.id)?.price_per_night || '--'}
-                          </span>
-                        )}
+                        <DateCell
+                          date={date}
+                          isToday={isToday}
+                          isRoomHeader={isRoomHeader}
+                          isClickable={isClickable}
+                          isSelected={isSelected}
+                          cellWidth={cellWidth}
+                          rate={rate}
+                          defaultPrice={rooms.find(r => r.id === row.id)?.price_per_night}
+                          onCellClick={handleClick}
+                        />
                       </div>
                     );
                   })}
 
                   {/* Bookings */}
-                  {row.type !== 'header' && getResourceBookings(row, row.type).map(booking => {
-                    const nights = differenceInDays(parseISO(booking.check_out_date), parseISO(booking.check_in_date));
-                    const isShortStay = nights <= 2;
-                    const fullName = booking.guests?.full_name || 'Unknown';
-                    // For short stays, show first name only or initials
-                    const displayName = isShortStay
-                      ? (fullName.split(' ')[0] || fullName.substring(0, 8))
-                      : fullName;
-
-                    const barStyle = getBarStyle(booking);
-                    const { clipPath, isClippedLeft, isClippedRight, ...wrapperStyle } = barStyle;
-
-                    // Don't render if hidden
-                    if (barStyle.display === 'none') return null;
-
-                    // Calculate pending balance
-                    const paidAmount = parseFloat(booking.paid_amount || 0);
-                    const totalAmount = parseFloat(booking.total_amount || 0);
-                    const pendingAmount = totalAmount - paidAmount;
-                    const hasPendingBalance = pendingAmount > 0;
-
-                    // Adjust padding based on clipping (responsive)
-                    const paddingLeft = isClippedLeft ? 'pl-1.5 sm:pl-3' : (isShortStay ? 'pl-4 sm:pl-7' : 'pl-5 sm:pl-8');
-                    const paddingRight = isClippedRight ? 'pr-1.5 sm:pr-3' : (isShortStay ? 'pr-4 sm:pr-7' : 'pr-6 sm:pr-10');
-
-                    return (
-                      // Shadow wrapper - applies drop-shadow to the clipped child
-                      <div
-                        key={booking.id}
-                        style={{
-                          ...wrapperStyle,
-                          filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.2))'
-                        }}
-                        onClick={() => handleBookingClick(booking)}
-                        className="cursor-pointer group"
-                        title={`${fullName} (${booking.status}) - ${nights} noite${nights > 1 ? 's' : ''}${hasPendingBalance ? ` - Pendente: ${formatCurrency(pendingAmount)}` : ''}`}
-                      >
-                        {/* Inner bar with clip-path */}
-                        <div
-                          style={{ clipPath }}
-                          className={`h-full w-full ${getStatusColor(booking.status)} transition-all group-hover:brightness-110 relative`}
-                        >
-                          <div className={`h-full w-full flex items-center gap-1 sm:gap-1.5 relative ${paddingLeft} ${paddingRight}`}>
-                            <span className="font-bold text-[10px] sm:text-xs text-white drop-shadow-md truncate">
-                              {displayName}
-                            </span>
-                            {hasPendingBalance && (
-                              <span className="flex items-center gap-1 flex-shrink-0 bg-black/20 rounded-full px-1.5 sm:px-2 py-0.5">
-                                <span className="w-1.5 h-1.5 bg-red-400 rounded-full shadow-[0_0_4px_rgba(248,113,113,0.9)] animate-pulse"></span>
-                                <span className="text-[9px] sm:text-[10px] text-red-100 italic font-medium">
-                                  {formatCurrency(pendingAmount)}
-                                </span>
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Drag handle on right edge to extend booking */}
-                          {!isClippedRight && !isMobile && (
-                            <div
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, booking)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="absolute right-0 top-0 bottom-0 w-6 cursor-ew-resize hover:bg-white/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Arrastar para estender"
-                            >
-                              <div className="w-1 h-6 bg-white/50 rounded-full"></div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {row.type !== 'header' && getResourceBookings(row, row.type).map(booking => (
+                    <BookingBar
+                      key={booking.id}
+                      booking={booking}
+                      barStyle={getBarStyle(booking)}
+                      onBookingClick={handleBookingClick}
+                      onDragStart={handleDragStart}
+                      isMobile={isMobile}
+                    />
+                  ))}
 
                   {/* Date Locks */}
-                  {row.type !== 'header' && getResourceLocks(row, row.type).map(lock => {
-                    const lockStyle = getLockBarStyle(lock);
-                    if (lockStyle.display === 'none') return null;
-
-                    const lockLabel = lock.lock_type === 'Outro'
-                      ? (lock.description || 'Bloqueado')
-                      : lock.lock_type;
-
-                    const { clipPath, isClippedLeft, isClippedRight, isShortLock, ...wrapperStyle } = lockStyle;
-                    const paddingLeft = isClippedLeft ? 'pl-1.5 sm:pl-3' : (isShortLock ? 'pl-3 sm:pl-5' : 'pl-5 sm:pl-8');
-                    const paddingRight = isClippedRight ? 'pr-1.5 sm:pr-3' : (isShortLock ? 'pr-3 sm:pr-5' : 'pr-6 sm:pr-10');
-
-                    return (
-                      <div
-                        key={lock.id}
-                        style={{
-                          ...wrapperStyle,
-                          filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.2))'
-                        }}
-                        onClick={() => setLockModal({
-                          isOpen: true,
-                          lock: lock,
-                          roomId: lock.room_id,
-                          bedId: lock.bed_id,
-                          startDate: lock.start_date,
-                          endDate: lock.end_date,
-                          lockType: lock.lock_type,
-                          description: lock.description || ''
-                        })}
-                        className="cursor-pointer group"
-                        title={`${lockLabel} (${lock.start_date} - ${lock.end_date})`}
-                      >
-                        <div
-                          style={{ clipPath }}
-                          className={`h-full w-full ${getLockColor(lock.lock_type)} text-white transition-all group-hover:brightness-110`}
-                        >
-                          <div className={`h-full w-full flex items-center gap-1.5 ${paddingLeft} ${paddingRight}`}>
-                            <Lock size={12} className="flex-shrink-0" />
-                            <span className="font-bold text-[10px] sm:text-xs truncate">
-                              {lockLabel}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {row.type !== 'header' && getResourceLocks(row, row.type).map(lock => (
+                    <LockBar
+                      key={lock.id}
+                      lock={lock}
+                      lockStyle={getLockBarStyle(lock)}
+                      onLockClick={(lock) => setLockModal({
+                        isOpen: true,
+                        lock: lock,
+                        roomId: lock.room_id,
+                        bedId: lock.bed_id,
+                        startDate: lock.start_date,
+                        endDate: lock.end_date,
+                        lockType: lock.lock_type,
+                        description: lock.description || ''
+                      })}
+                    />
+                  ))}
                 </div>
               </div>
             );
