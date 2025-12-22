@@ -67,13 +67,13 @@ const Tasks = () => {
                     .from('tasks')
                     .select(`
                         *,
-                        assigned_user:profiles!tasks_assigned_to_fkey(id, full_name),
-                        area:areas(id, name, rooms(name, room_number, type)),
+                        assigned_user:profiles(id, full_name),
+                        area:areas(id, name, room_id, rooms(name, room_number, type)),
                         bed:beds(id, bed_number)
                     `)
                     .order('due_date', { ascending: true }),
                 supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
-                supabase.from('areas').select('id, name, type').eq('is_active', true),
+                supabase.from('areas').select('id, name, type').eq('status', 'active'),
             ]);
 
             if (tasksRes.error) throw tasksRes.error;
