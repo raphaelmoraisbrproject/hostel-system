@@ -28,31 +28,61 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
   const [formData, setFormData] = useState({
     selectedType: 'bedroom',
     customName: '',
+    selectedRoomId: '',
     floor: '',
     capacity: '',
     status: 'active',
     cleaning_frequency: 'on_checkout',
     description: '',
   });
+  const [rooms, setRooms] = useState([]);
   const [checklistItems, setChecklistItems] = useState([]);
   const [newItemText, setNewItemText] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingChecklist, setLoadingChecklist] = useState(false);
+  const [loadingRooms, setLoadingRooms] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('info');
 
   const isCustomType = formData.selectedType === 'custom';
+  const isBedroomType = formData.selectedType === 'bedroom';
+
+  // Fetch rooms when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchRooms();
+    }
+  }, [isOpen]);
+
+  const fetchRooms = async () => {
+    setLoadingRooms(true);
+    try {
+      const { data, error } = await supabase
+        .from('rooms')
+        .select('id, name, type, capacity, room_number')
+        .eq('is_active', true)
+        .order('room_number');
+
+      if (error) throw error;
+      setRooms(data || []);
+    } catch (err) {
+      console.error('Error fetching rooms:', err);
+    } finally {
+      setLoadingRooms(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
       if (area) {
         // Determine if it's a custom type by checking if name doesn't match any predefined type
         const predefinedType = AREA_TYPES.find(t => t.value !== 'custom' && area.name.startsWith(t.label));
-        const isCustom = !predefinedType;
+        const isCustom = !predefinedType && !area.room_id;
 
         setFormData({
-          selectedType: isCustom ? 'custom' : area.type,
+          selectedType: area.room_id ? 'bedroom' : (isCustom ? 'custom' : area.type),
           customName: isCustom ? area.name : '',
+          selectedRoomId: area.room_id || '',
           floor: area.floor || '',
           capacity: area.capacity || '',
           status: area.status || 'active',
@@ -70,6 +100,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
     setFormData({
       selectedType: 'bedroom',
       customName: '',
+      selectedRoomId: '',
       floor: '',
       capacity: '',
       status: 'active',
@@ -80,6 +111,23 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
     setNewItemText('');
     setError('');
     setActiveTab('info');
+  };
+
+  const handleRoomSelect = (roomId) => {
+    const selectedRoom = rooms.find(r => r.id === roomId);
+    if (selectedRoom) {
+      setFormData(prev => ({
+        ...prev,
+        selectedRoomId: roomId,
+        capacity: selectedRoom.capacity?.toString() || '',
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        selectedRoomId: '',
+        capacity: '',
+      }));
+    }
   };
 
   const fetchChecklistItems = async (areaId) => {
@@ -105,6 +153,13 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
       return formData.customName;
     }
 
+    if (isBedroomType && formData.selectedRoomId) {
+      const selectedRoom = rooms.find(r => r.id === formData.selectedRoomId);
+      if (selectedRoom) {
+        return `Quarto ${selectedRoom.room_number} - ${selectedRoom.name}`;
+      }
+    }
+
     const typeLabel = AREA_TYPES.find(t => t.value === formData.selectedType)?.label || '';
     const floorSuffix = formData.floor ? ` - Andar ${formData.floor}` : '';
     return `${typeLabel}${floorSuffix}`;
@@ -116,6 +171,11 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
 
     if (isCustomType && !formData.customName.trim()) {
       setError('Digite o nome da instalação personalizada');
+      return;
+    }
+
+    if (isBedroomType && !formData.selectedRoomId) {
+      setError('Selecione um quarto');
       return;
     }
 
@@ -133,6 +193,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
         capacity: formData.capacity ? parseInt(formData.capacity) : null,
         status: formData.status,
         cleaning_frequency: formData.cleaning_frequency,
+        room_id: isBedroomType ? formData.selectedRoomId : null,
       };
 
       let areaId = area?.id;
@@ -332,6 +393,40 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
                 )}
               </div>
 
+              {/* Room selector - only shows when "Quarto" is selected */}
+              {isBedroomType && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Selecione o Quarto *
+                  </label>
+                  {loadingRooms ? (
+                    <div className="flex items-center gap-2 py-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div>
+                      <span className="text-sm text-gray-500">Carregando quartos...</span>
+                    </div>
+                  ) : rooms.length === 0 ? (
+                    <p className="text-sm text-red-600 py-2">Nenhum quarto cadastrado. Cadastre quartos primeiro.</p>
+                  ) : (
+                    <select
+                      value={formData.selectedRoomId}
+                      onChange={(e) => handleRoomSelect(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      disabled={!!area}
+                    >
+                      <option value="">Selecione um quarto...</option>
+                      {rooms.map(room => (
+                        <option key={room.id} value={room.id}>
+                          Quarto {room.room_number} - {room.name} ({room.capacity} camas)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {area && (
+                    <p className="text-xs text-gray-500 mt-1">Quarto não pode ser alterado</p>
+                  )}
+                </div>
+              )}
+
               {/* Custom Name - only shows when "Personalizado" is selected */}
               {isCustomType && (
                 <div>
@@ -379,37 +474,20 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
                 </div>
               </div>
 
-              {/* Capacity (for bedrooms) and Frequency */}
-              <div className="grid grid-cols-2 gap-4">
-                {formData.selectedType === 'bedroom' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Capacidade (camas)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.capacity}
-                      onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                      placeholder="4"
-                      min="1"
-                    />
-                  </div>
-                )}
-                <div className={formData.selectedType !== 'bedroom' ? 'col-span-2' : ''}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Frequência de Limpeza
-                  </label>
-                  <select
-                    value={formData.cleaning_frequency}
-                    onChange={(e) => setFormData({ ...formData, cleaning_frequency: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  >
-                    {FREQUENCY_OPTIONS.map(freq => (
-                      <option key={freq.value} value={freq.value}>{freq.label}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* Frequency */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Frequência de Limpeza
+                </label>
+                <select
+                  value={formData.cleaning_frequency}
+                  onChange={(e) => setFormData({ ...formData, cleaning_frequency: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                  {FREQUENCY_OPTIONS.map(freq => (
+                    <option key={freq.value} value={freq.value}>{freq.label}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Description */}

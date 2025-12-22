@@ -52,7 +52,8 @@ const Areas = () => {
         .from('areas')
         .select(`
           *,
-          area_checklist_items(count)
+          area_checklist_items(count),
+          rooms(name, room_number)
         `)
         .order('name');
 
