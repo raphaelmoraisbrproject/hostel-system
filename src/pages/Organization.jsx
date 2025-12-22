@@ -6,11 +6,12 @@ import { CURRENCIES } from '../constants/currencies';
 import { useCurrency } from '../hooks/useCurrency';
 import { supabase } from '../lib/supabase';
 import InviteUserModal from '../components/InviteUserModal';
+import ConfirmModal from '../components/ConfirmModal';
 
 const Organization = () => {
   const { currency, updateCurrency, loading } = useSettings();
   const { formatCurrency } = useCurrency();
-  const { user, getInvites, cancelInvite } = useAuth();
+  const { user, getInvites, cancelInvite, deleteUser } = useAuth();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -19,6 +20,13 @@ const Organization = () => {
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [copiedInviteId, setCopiedInviteId] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    loading: false,
+  });
 
   useEffect(() => {
     if (user?.id) {
@@ -46,10 +54,11 @@ const Organization = () => {
   const fetchTeamData = async () => {
     setLoadingTeam(true);
     try {
-      // Fetch team members
+      // Fetch team members - only show active users
       const { data: members, error: membersError } = await supabase
         .from('profiles')
         .select('*')
+        .eq('is_active', true)
         .order('created_at', { ascending: false });
 
       if (membersError) throw membersError;
@@ -97,23 +106,58 @@ const Organization = () => {
   };
 
   const handleCancelInvite = async (inviteId) => {
-    if (!confirm('Tem certeza que deseja cancelar este convite?')) {
-      return;
-    }
-
-    try {
-      await cancelInvite(inviteId);
-      setMessage({ type: 'success', text: 'Convite cancelado com sucesso!' });
-      fetchTeamData();
-    } catch (err) {
-      console.error('Error canceling invite:', err);
-      setMessage({ type: 'error', text: 'Erro ao cancelar convite' });
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Cancelar Convite',
+      message: 'Tem certeza que deseja cancelar este convite?',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, loading: true }));
+        try {
+          await cancelInvite(inviteId);
+          setMessage({ type: 'success', text: 'Convite cancelado com sucesso!' });
+          fetchTeamData();
+          setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, loading: false });
+        } catch (err) {
+          console.error('Error canceling invite:', err);
+          setMessage({ type: 'error', text: 'Erro ao cancelar convite' });
+          setConfirmModal((prev) => ({ ...prev, loading: false }));
+        }
+      },
+      loading: false,
+    });
   };
 
   const handleInviteSuccess = () => {
     setMessage({ type: 'success', text: 'Convite criado com sucesso!' });
     fetchTeamData();
+  };
+
+  const handleDeleteUser = async (userId, userName) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Usuário',
+      message: `Tem certeza que deseja excluir ${userName} da equipe? Esta ação não pode ser desfeita.`,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, loading: true }));
+        try {
+          const result = await deleteUser(userId);
+          setMessage({
+            type: 'success',
+            text: result.message || 'Usuário excluído com sucesso!'
+          });
+          fetchTeamData();
+          setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, loading: false });
+        } catch (err) {
+          console.error('Error deleting user:', err);
+          setMessage({
+            type: 'error',
+            text: err.message || 'Erro ao excluir usuário'
+          });
+          setConfirmModal((prev) => ({ ...prev, loading: false }));
+        }
+      },
+      loading: false,
+    });
   };
 
   const getRoleBadgeColor = (role) => {
@@ -321,6 +365,15 @@ const Organization = () => {
                           >
                             {member.is_active ? 'Ativo' : 'Inativo'}
                           </span>
+                          {member.id !== user?.id && (
+                            <button
+                              onClick={() => handleDeleteUser(member.id, member.full_name)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Excluir usuário"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -406,6 +459,19 @@ const Organization = () => {
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
         onSuccess={handleInviteSuccess}
+      />
+
+      {/* Modal de Confirmação */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, loading: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText="Confirmar"
+        cancelText="Cancelar"
+        confirmButtonColor="red"
+        loading={confirmModal.loading}
       />
     </div>
   );

@@ -131,6 +131,34 @@ export const AuthProvider = ({ children }) => {
         if (error) throw error;
     };
 
+    const deleteUser = async (userId) => {
+        const { data, error } = await supabase
+            .rpc('delete_user_profile', { p_user_id: userId });
+
+        if (error) throw error;
+
+        // Check the JSONB response from the RPC function
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to delete user');
+        }
+
+        return data;
+    };
+
+    const reactivateUser = async (userId) => {
+        const { data, error } = await supabase
+            .rpc('reactivate_user_profile', { p_user_id: userId });
+
+        if (error) throw error;
+
+        // Check the JSONB response from the RPC function
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to reactivate user');
+        }
+
+        return data;
+    };
+
     const value = {
         signUp: (data) => supabase.auth.signUp(data),
         signIn: (data) => supabase.auth.signInWithPassword(data),
@@ -142,6 +170,8 @@ export const AuthProvider = ({ children }) => {
         updatePassword,
         getInvites,
         cancelInvite,
+        deleteUser,
+        reactivateUser,
         user,
     };
 
