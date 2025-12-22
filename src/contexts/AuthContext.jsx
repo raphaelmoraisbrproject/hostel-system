@@ -26,9 +26,31 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const createInvite = async (email, role) => {
+        // Get the current user ID for invited_by field
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Use upsert to replace existing invite for the same email
+        // This handles cases where:
+        // - Previous invite expired
+        // - Previous invite was cancelled
+        // - Admin wants to resend/update an existing invite
         const { data, error } = await supabase
             .from('user_invites')
-            .insert({ email, role })
+            .upsert(
+                {
+                    email,
+                    role,
+                    invited_by: user?.id,
+                    token: crypto.randomUUID(), // Generate new token
+                    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+                    used_at: null, // Reset used_at in case it was previously used
+                    created_at: new Date().toISOString() // Update creation time
+                },
+                {
+                    onConflict: 'email', // Conflict resolution on email column
+                    ignoreDuplicates: false // Update existing row instead of ignoring
+                }
+            )
             .select('token')
             .single();
 
