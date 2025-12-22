@@ -100,7 +100,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- =====================================================
 -- 6. FUNÇÃO PARA MARCAR CONVITE COMO USADO
 -- =====================================================
-CREATE OR REPLACE FUNCTION public.mark_invite_as_used(invite_token UUID)
+CREATE OR REPLACE FUNCTION public.mark_invite_as_used(p_invite_id UUID, p_user_id UUID)
 RETURNS BOOLEAN AS $$
 DECLARE
   invite_record RECORD;
@@ -108,7 +108,7 @@ BEGIN
   -- Buscar o convite
   SELECT * INTO invite_record
   FROM user_invites
-  WHERE token = invite_token
+  WHERE id = p_invite_id
   AND expires_at > NOW()
   AND used_at IS NULL;
 
@@ -120,7 +120,7 @@ BEGIN
   -- Marcar como usado
   UPDATE user_invites
   SET used_at = NOW()
-  WHERE id = invite_record.id;
+  WHERE id = p_invite_id;
 
   RETURN true;
 END;

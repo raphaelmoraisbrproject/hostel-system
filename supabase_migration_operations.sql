@@ -343,17 +343,15 @@ ALTER TABLE laundry_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE laundry_cycles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
 
--- PROFILES: usuários veem seu próprio perfil, admin/manager veem todos
-DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
-CREATE POLICY "Users can view own profile" ON profiles
-  FOR SELECT USING (
-    auth.uid() = id
-    OR EXISTS (
-      SELECT 1 FROM profiles p
-      WHERE p.id = auth.uid()
-      AND p.role IN ('admin', 'manager')
-    )
-  );
+-- PROFILES: todos usuários autenticados podem ver todos os perfis (para equipe)
+-- Apenas admin pode modificar
+DROP POLICY IF EXISTS "Authenticated users can view all profiles" ON profiles;
+CREATE POLICY "Authenticated users can view all profiles" ON profiles
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+CREATE POLICY "Users can update own profile" ON profiles
+  FOR UPDATE USING (auth.uid() = id);
 
 DROP POLICY IF EXISTS "Admin can manage all profiles" ON profiles;
 CREATE POLICY "Admin can manage all profiles" ON profiles
