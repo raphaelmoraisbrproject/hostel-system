@@ -78,7 +78,7 @@ CREATE POLICY "Admin can update invites" ON user_invites
 -- =====================================================
 -- 5. FUNÇÃO PARA VALIDAR CONVITE
 -- =====================================================
-CREATE OR REPLACE FUNCTION public.validate_invite_token(invite_token UUID)
+CREATE OR REPLACE FUNCTION public.validate_invite_token(p_token UUID)
 RETURNS TABLE (
   valid BOOLEAN,
   email TEXT,
@@ -93,7 +93,7 @@ BEGIN
     ui.role,
     ui.id AS invite_id
   FROM user_invites ui
-  WHERE ui.token = invite_token;
+  WHERE ui.token = p_token;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
