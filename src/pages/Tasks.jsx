@@ -151,8 +151,8 @@ const Tasks = () => {
                 type: formData.type,
                 priority: formData.priority,
                 assigned_to: formData.assigned_to || null,
-                due_date: formData.due_date,
-                due_time: formData.due_time || null,
+                due_date: formData.type === 'daily' ? null : formData.due_date,
+                due_time: formData.type === 'daily' ? null : (formData.due_time || null),
                 checklist_items: formData.checklist_items,
             };
 
@@ -342,7 +342,7 @@ const Tasks = () => {
                 {filteredTasks.map(task => {
                     const statusInfo = getStatusInfo(task.status);
                     const priorityInfo = getPriorityInfo(task.priority);
-                    const isOverdue = new Date(task.due_date) < new Date() && task.status !== 'completed';
+                    const isOverdue = task.due_date && task.type !== 'daily' && new Date(task.due_date) < new Date() && task.status !== 'completed';
 
                     return (
                         <div
@@ -376,15 +376,24 @@ const Tasks = () => {
                                                 {task.bed && ` - Cama ${task.bed.bed_number}`}
                                             </span>
                                         )}
-                                        <span className="flex items-center gap-1">
-                                            <Calendar size={14} />
-                                            {new Date(task.due_date).toLocaleDateString('pt-BR')}
-                                        </span>
-                                        {task.due_time && (
-                                            <span className="flex items-center gap-1">
-                                                <Clock size={14} />
-                                                {task.due_time}
+                                        {task.type === 'daily' ? (
+                                            <span className="flex items-center gap-1 text-blue-600">
+                                                <Calendar size={14} />
+                                                Recorrente diária
                                             </span>
+                                        ) : task.due_date && (
+                                            <>
+                                                <span className="flex items-center gap-1">
+                                                    <Calendar size={14} />
+                                                    {new Date(task.due_date).toLocaleDateString('pt-BR')}
+                                                </span>
+                                                {task.due_time && (
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock size={14} />
+                                                        {task.due_time}
+                                                    </span>
+                                                )}
+                                            </>
                                         )}
                                         {task.assigned_user && (
                                             <span className="flex items-center gap-1">
@@ -539,27 +548,36 @@ const Tasks = () => {
                                 </select>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
-                                    <input
-                                        type="date"
-                                        value={formData.due_date}
-                                        onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                        required
-                                    />
+                            {/* Date/Time - Hidden for daily recurring tasks */}
+                            {formData.type !== 'daily' ? (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
+                                        <input
+                                            type="date"
+                                            value={formData.due_date}
+                                            onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Horário</label>
+                                        <input
+                                            type="time"
+                                            value={formData.due_time}
+                                            onChange={(e) => setFormData({ ...formData, due_time: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Horário</label>
-                                    <input
-                                        type="time"
-                                        value={formData.due_time}
-                                        onChange={(e) => setFormData({ ...formData, due_time: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                    />
+                            ) : (
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <p className="text-sm text-blue-700">
+                                        Tarefas diárias são recorrentes e aparecem todos os dias automaticamente.
+                                    </p>
                                 </div>
-                            </div>
+                            )}
 
                             {/* Checklist */}
                             <div>
