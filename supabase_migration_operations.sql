@@ -343,8 +343,8 @@ ALTER TABLE laundry_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE laundry_cycles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
 
--- PROFILES: todos usuários autenticados podem ver todos os perfis (para equipe)
--- Apenas admin pode modificar
+-- PROFILES: Simple policies without recursion
+-- ⚠️ IMPORTANT: Do NOT query the profiles table in policies for the profiles table (causes infinite recursion)
 DROP POLICY IF EXISTS "Authenticated users can view all profiles" ON profiles;
 CREATE POLICY "Authenticated users can view all profiles" ON profiles
   FOR SELECT USING (auth.uid() IS NOT NULL);
@@ -353,15 +353,17 @@ DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 CREATE POLICY "Users can update own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
 
-DROP POLICY IF EXISTS "Admin can manage all profiles" ON profiles;
-CREATE POLICY "Admin can manage all profiles" ON profiles
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM profiles p
-      WHERE p.id = auth.uid()
-      AND p.role = 'admin'
-    )
-  );
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
+CREATE POLICY "Users can insert own profile" ON profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can delete own profile" ON profiles;
+CREATE POLICY "Users can delete own profile" ON profiles
+  FOR DELETE USING (auth.uid() = id);
+
+-- NOTE: Removed "Admin can manage all profiles" policy as it caused infinite recursion
+-- The policy was querying the profiles table within its own policy check
+-- For admin-only operations, handle permissions at the application level or use auth.jwt() claims
 
 -- ROLE_PERMISSIONS: apenas admin pode modificar
 DROP POLICY IF EXISTS "Anyone can view permissions" ON role_permissions;
