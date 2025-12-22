@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Plus, Search, Building2, Bath, ChefHat, Sofa, Wrench, Trees, Edit2, Trash2, CheckSquare } from 'lucide-react';
+import { MapPin, Plus, Search, Building2, Bath, ChefHat, Sofa, Wrench, Trees, Edit2, Trash2, BedDouble } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AreaModal from '../components/AreaModal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -19,14 +19,9 @@ const STATUS_LABELS = {
   inactive: { label: 'Inativo', color: 'bg-red-100 text-red-800' },
 };
 
-const FREQUENCY_LABELS = {
-  daily: 'Diária',
-  on_checkout: 'No checkout',
-  weekly: 'Semanal',
-};
-
 const Areas = () => {
   const [areas, setAreas] = useState([]);
+  const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -42,29 +37,57 @@ const Areas = () => {
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
-    fetchAreas();
+    fetchData();
   }, []);
 
-  const fetchAreas = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('areas')
-        .select(`
-          *,
-          area_checklist_items(count),
-          rooms(name, room_number)
-        `)
-        .order('name');
+      // Fetch areas and rooms in parallel
+      const [areasRes, roomsRes] = await Promise.all([
+        supabase
+          .from('areas')
+          .select('*, rooms(name, room_number, capacity)')
+          .order('name'),
+        supabase
+          .from('rooms')
+          .select('id, name, room_number, capacity, type, is_active')
+          .eq('is_active', true)
+          .order('room_number'),
+      ]);
 
-      if (error) throw error;
-      setAreas(data || []);
+      if (areasRes.error) throw areasRes.error;
+      if (roomsRes.error) throw roomsRes.error;
+
+      setAreas(areasRes.data || []);
+      setRooms(roomsRes.data || []);
     } catch (err) {
-      console.error('Error fetching areas:', err);
-      setMessage({ type: 'error', text: 'Erro ao carregar áreas' });
+      console.error('Error fetching data:', err);
+      setMessage({ type: 'error', text: 'Erro ao carregar dados' });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Combine areas with rooms that don't have areas yet
+  const getAllAreas = () => {
+    const areasWithRoomIds = new Set(areas.filter(a => a.room_id).map(a => a.room_id));
+
+    // Rooms without corresponding areas (virtual areas)
+    const virtualAreas = rooms
+      .filter(room => !areasWithRoomIds.has(room.id))
+      .map(room => ({
+        id: `room-${room.id}`,
+        room_id: room.id,
+        name: `Quarto ${room.room_number} - ${room.name}`,
+        type: 'bedroom',
+        is_active: room.is_active,
+        capacity: room.capacity,
+        isVirtual: true, // Flag to indicate this is auto-generated from room
+        originalRoom: room,
+      }));
+
+    return [...areas.map(a => ({ ...a, isVirtual: false })), ...virtualAreas];
   };
 
   const handleAddArea = () => {
@@ -73,11 +96,19 @@ const Areas = () => {
   };
 
   const handleEditArea = (area) => {
-    setSelectedArea(area);
-    setIsModalOpen(true);
+    if (area.isVirtual) {
+      // For virtual areas, open modal to create a real area from room
+      setSelectedArea(null);
+      setIsModalOpen(true);
+    } else {
+      setSelectedArea(area);
+      setIsModalOpen(true);
+    }
   };
 
   const handleDeleteArea = (area) => {
+    if (area.isVirtual) return; // Can't delete virtual areas
+
     setConfirmModal({
       isOpen: true,
       title: 'Excluir Área',
@@ -93,7 +124,7 @@ const Areas = () => {
           if (error) throw error;
 
           setMessage({ type: 'success', text: 'Área excluída com sucesso!' });
-          fetchAreas();
+          fetchData();
           setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, loading: false });
         } catch (err) {
           console.error('Error deleting area:', err);
@@ -107,14 +138,15 @@ const Areas = () => {
 
   const handleModalSuccess = () => {
     setMessage({ type: 'success', text: selectedArea ? 'Área atualizada!' : 'Área criada!' });
-    fetchAreas();
+    fetchData();
     setIsModalOpen(false);
     setTimeout(() => setMessage(null), 3000);
   };
 
-  const filteredAreas = areas.filter(area => {
-    const matchesSearch = area.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      area.description?.toLowerCase().includes(searchTerm.toLowerCase());
+  const allAreas = getAllAreas();
+
+  const filteredAreas = allAreas.filter(area => {
+    const matchesSearch = area.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || area.type === filterType;
     return matchesSearch && matchesType;
   });
@@ -139,7 +171,7 @@ const Areas = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Áreas</h1>
-            <p className="text-gray-500">Gerencie as áreas e checklists do hostel</p>
+            <p className="text-gray-500">Gerencie as áreas do hostel</p>
           </div>
         </div>
         <button
@@ -211,67 +243,76 @@ const Areas = () => {
           {filteredAreas.map((area) => {
             const typeInfo = getAreaTypeInfo(area.type);
             const IconComponent = typeInfo.icon;
-            const statusInfo = STATUS_LABELS[area.status] || STATUS_LABELS.active;
-            const checklistCount = area.area_checklist_items?.[0]?.count || 0;
+            const statusInfo = area.is_active !== false ? STATUS_LABELS.active : STATUS_LABELS.inactive;
 
             return (
               <div
                 key={area.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+                className={`bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition-shadow ${
+                  area.isVirtual ? 'border-dashed border-blue-200' : 'border-gray-100'
+                }`}
               >
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div className={`p-2 rounded-lg ${typeInfo.color}`}>
                       <IconComponent size={20} />
                     </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusInfo.color}`}>
-                      {statusInfo.label}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {area.isVirtual && (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-600">
+                          Auto
+                        </span>
+                      )}
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusInfo.color}`}>
+                        {statusInfo.label}
+                      </span>
+                    </div>
                   </div>
 
                   <h3 className="font-semibold text-gray-900 mb-1">{area.name}</h3>
                   <p className="text-sm text-gray-500 mb-3">{typeInfo.label}</p>
 
-                  {area.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{area.description}</p>
-                  )}
-
                   <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                    {area.location && (
+                    {area.floor && (
                       <span className="flex items-center gap-1">
                         <MapPin size={14} />
-                        {area.location}
+                        Andar {area.floor}
                       </span>
                     )}
-                    {area.capacity && (
-                      <span>{area.capacity} camas</span>
-                    )}
-                    {area.cleaning_frequency && (
-                      <span>Limpeza: {FREQUENCY_LABELS[area.cleaning_frequency] || area.cleaning_frequency}</span>
+                    {(area.capacity || area.rooms?.capacity) && (
+                      <span className="flex items-center gap-1">
+                        <BedDouble size={14} />
+                        {area.capacity || area.rooms?.capacity} camas
+                      </span>
                     )}
                   </div>
 
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                    <div className="flex items-center gap-1 text-sm text-gray-500">
-                      <CheckSquare size={14} />
-                      <span>{checklistCount} itens no checklist</span>
+                    <div className="text-sm text-gray-500">
+                      {area.isVirtual ? (
+                        <span className="text-blue-600">Carregado do quarto</span>
+                      ) : (
+                        <span>Área cadastrada</span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleEditArea(area)}
-                        className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                        title="Editar área"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteArea(area)}
-                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Excluir área"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    {!area.isVirtual && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleEditArea(area)}
+                          className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                          title="Editar área"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteArea(area)}
+                          className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Excluir área"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -281,22 +322,19 @@ const Areas = () => {
       )}
 
       {/* Summary */}
-      {areas.length > 0 && (
+      {allAreas.length > 0 && (
         <div className="bg-gray-50 rounded-lg p-4">
           <div className="flex flex-wrap gap-4 text-sm">
             <span className="text-gray-600">
-              <strong>{areas.length}</strong> áreas cadastradas
+              <strong>{allAreas.length}</strong> áreas total
             </span>
             <span className="text-gray-400">|</span>
-            {Object.entries(AREA_TYPES).map(([key, { label }]) => {
-              const count = areas.filter(a => a.type === key).length;
-              if (count === 0) return null;
-              return (
-                <span key={key} className="text-gray-600">
-                  <strong>{count}</strong> {label.toLowerCase()}{count > 1 ? 's' : ''}
-                </span>
-              );
-            })}
+            <span className="text-gray-600">
+              <strong>{areas.length}</strong> cadastradas
+            </span>
+            <span className="text-gray-600">
+              <strong>{allAreas.filter(a => a.isVirtual).length}</strong> de quartos
+            </span>
           </div>
         </div>
       )}
