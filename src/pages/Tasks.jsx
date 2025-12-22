@@ -68,7 +68,7 @@ const Tasks = () => {
                     .select(`
                         *,
                         assigned_user:profiles(id, full_name),
-                        area:areas(id, name, room_id, rooms(name, room_number, type)),
+                        area:areas(id, name, room_id),
                         bed:beds(id, bed_number)
                     `)
                     .order('due_date', { ascending: true }),
@@ -76,9 +76,18 @@ const Tasks = () => {
                 supabase.from('areas').select('id, name, type').eq('is_active', true),
             ]);
 
-            if (tasksRes.error) throw tasksRes.error;
-            if (usersRes.error) throw usersRes.error;
-            if (areasRes.error) throw areasRes.error;
+            if (tasksRes.error) {
+                console.error('Tasks query error:', tasksRes.error);
+                throw tasksRes.error;
+            }
+            if (usersRes.error) {
+                console.error('Users query error:', usersRes.error);
+                throw usersRes.error;
+            }
+            if (areasRes.error) {
+                console.error('Areas query error:', areasRes.error);
+                throw areasRes.error;
+            }
 
             setTasks(tasksRes.data || []);
             setUsers(usersRes.data || []);
