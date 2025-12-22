@@ -84,10 +84,10 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
           customName: isCustom ? area.name : '',
           selectedRoomId: area.room_id || '',
           floor: area.floor || '',
-          capacity: area.capacity || '',
-          status: area.status || 'active',
+          capacity: '',
+          status: area.is_active === false ? 'inactive' : 'active',
           cleaning_frequency: area.cleaning_frequency || 'on_checkout',
-          description: area.description || '',
+          description: '',
         });
         fetchChecklistItems(area.id);
       } else {
@@ -188,12 +188,10 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
       const areaData = {
         name: areaName,
         type: areaType,
-        description: formData.description || null,
-        floor: formData.floor ? parseInt(formData.floor) : null,
-        capacity: formData.capacity ? parseInt(formData.capacity) : null,
-        status: formData.status,
+        floor: formData.floor || null,
         cleaning_frequency: formData.cleaning_frequency,
         room_id: isBedroomType ? formData.selectedRoomId : null,
+        is_active: formData.status === 'active',
       };
 
       let areaId = area?.id;
