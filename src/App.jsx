@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -22,8 +23,9 @@ function App() {
   return (
     <AuthProvider>
       <SettingsProvider>
-        <Router>
-        <Routes>
+        <PermissionsProvider>
+          <Router>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register/:token" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -74,7 +76,8 @@ function App() {
             </ProtectedRoute>
           } />
         </Routes>
-        </Router>
+          </Router>
+        </PermissionsProvider>
       </SettingsProvider>
     </AuthProvider>
   );

@@ -73,7 +73,7 @@ const Tasks = () => {
                     `)
                     .order('due_date', { ascending: true }),
                 supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
-                supabase.from('areas').select('id, name, type').eq('status', 'active'),
+                supabase.from('areas').select('id, name, type').eq('is_active', true),
             ]);
 
             if (tasksRes.error) throw tasksRes.error;
