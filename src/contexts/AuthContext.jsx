@@ -41,7 +41,15 @@ export const AuthProvider = ({ children }) => {
             .rpc('validate_invite_token', { p_token: token });
 
         if (error) throw error;
-        return data;
+
+        // The RPC function returns a table (array of rows)
+        // If no token found, returns empty array
+        // If token found, returns array with one object
+        if (!data || data.length === 0) {
+            return { valid: false, email: null, role: null, invite_id: null };
+        }
+
+        return data[0];
     };
 
     const signUpWithInvite = async (token, password, fullName) => {
