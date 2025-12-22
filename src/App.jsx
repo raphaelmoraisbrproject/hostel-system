@@ -14,6 +14,7 @@ import Bookings from './pages/Bookings';
 import Guests from './pages/Guests';
 import Finance from './pages/Finance';
 import Organization from './pages/Organization';
+import Areas from './pages/Areas';
 import './i18n';
 
 function App() {
@@ -59,6 +60,11 @@ function App() {
           <Route path="/organization" element={
             <ProtectedRoute>
               <Layout><Organization /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/areas" element={
+            <ProtectedRoute>
+              <Layout><Areas /></Layout>
             </ProtectedRoute>
           } />
         </Routes>

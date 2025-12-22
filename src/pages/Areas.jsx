@@ -1,440 +1,327 @@
 import { useState, useEffect } from 'react';
+import { MapPin, Plus, Search, Building2, Bath, ChefHat, Sofa, Wrench, Trees, Edit2, Trash2, CheckSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { usePermissions } from '../contexts/PermissionsContext';
-import { Plus, Edit2, Trash2, Search, MapPin, X, Home, Bath, Users, Wrench, TreeDeciduous } from 'lucide-react';
+import AreaModal from '../components/AreaModal';
+import ConfirmModal from '../components/ConfirmModal';
+
+const AREA_TYPES = {
+  bedroom: { label: 'Quarto', icon: Building2, color: 'bg-blue-100 text-blue-600' },
+  bathroom: { label: 'Banheiro', icon: Bath, color: 'bg-cyan-100 text-cyan-600' },
+  kitchen: { label: 'Cozinha', icon: ChefHat, color: 'bg-orange-100 text-orange-600' },
+  common_area: { label: 'Área Comum', icon: Sofa, color: 'bg-purple-100 text-purple-600' },
+  service: { label: 'Serviço', icon: Wrench, color: 'bg-gray-100 text-gray-600' },
+  external: { label: 'Externo', icon: Trees, color: 'bg-green-100 text-green-600' },
+};
+
+const STATUS_LABELS = {
+  active: { label: 'Ativo', color: 'bg-green-100 text-green-800' },
+  maintenance: { label: 'Manutenção', color: 'bg-yellow-100 text-yellow-800' },
+  inactive: { label: 'Inativo', color: 'bg-red-100 text-red-800' },
+};
+
+const FREQUENCY_LABELS = {
+  daily: 'Diária',
+  on_checkout: 'No checkout',
+  weekly: 'Semanal',
+};
 
 const Areas = () => {
-    const { canCreate, canEdit, canDelete } = usePermissions();
-    const [areas, setAreas] = useState([]);
-    const [rooms, setRooms] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState('all');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingArea, setEditingArea] = useState(null);
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+  const [areas, setAreas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('all');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedArea, setSelectedArea] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    loading: false,
+  });
+  const [message, setMessage] = useState(null);
 
-    const [formData, setFormData] = useState({
-        name: '',
-        type: 'common',
-        floor: '',
-        room_id: '',
-        cleaning_frequency: 'daily',
-    });
+  useEffect(() => {
+    fetchAreas();
+  }, []);
 
-    const typeOptions = [
-        { value: 'room', label: 'Quarto', icon: Home },
-        { value: 'bathroom', label: 'Banheiro', icon: Bath },
-        { value: 'common', label: 'Área Comum', icon: Users },
-        { value: 'service', label: 'Serviço', icon: Wrench },
-        { value: 'external', label: 'Área Externa', icon: TreeDeciduous },
-    ];
+  const fetchAreas = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('areas')
+        .select(`
+          *,
+          area_checklist_items(count)
+        `)
+        .order('name');
 
-    const frequencyOptions = [
-        { value: 'daily', label: 'Diária' },
-        { value: 'checkout', label: 'Check-out' },
-        { value: 'weekly', label: 'Semanal' },
-        { value: 'monthly', label: 'Mensal' },
-    ];
-
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
-        try {
-            const [areasRes, roomsRes] = await Promise.all([
-                supabase.from('areas').select('*').order('name'),
-                supabase.from('rooms').select('id, name'),
-            ]);
-
-            if (areasRes.error) throw areasRes.error;
-            if (roomsRes.error) throw roomsRes.error;
-
-            setAreas(areasRes.data || []);
-            setRooms(roomsRes.data || []);
-        } catch (err) {
-            console.error('Error fetching data:', err);
-            setError('Erro ao carregar dados');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleOpenModal = (area = null) => {
-        if (area) {
-            setEditingArea(area);
-            setFormData({
-                name: area.name,
-                type: area.type,
-                floor: area.floor || '',
-                room_id: area.room_id || '',
-                cleaning_frequency: area.cleaning_frequency || 'daily',
-            });
-        } else {
-            setEditingArea(null);
-            setFormData({
-                name: '',
-                type: 'common',
-                floor: '',
-                room_id: '',
-                cleaning_frequency: 'daily',
-            });
-        }
-        setError('');
-        setSuccess('');
-        setIsModalOpen(true);
-    };
-
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-        setEditingArea(null);
-        setError('');
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-
-        try {
-            const areaData = {
-                name: formData.name,
-                type: formData.type,
-                floor: formData.floor || null,
-                room_id: formData.room_id || null,
-                cleaning_frequency: formData.cleaning_frequency,
-            };
-
-            if (editingArea) {
-                const { error } = await supabase
-                    .from('areas')
-                    .update(areaData)
-                    .eq('id', editingArea.id);
-
-                if (error) throw error;
-                setSuccess('Área atualizada com sucesso!');
-            } else {
-                const { error } = await supabase
-                    .from('areas')
-                    .insert(areaData);
-
-                if (error) throw error;
-                setSuccess('Área criada com sucesso!');
-            }
-
-            await fetchData();
-            setTimeout(handleCloseModal, 1000);
-        } catch (err) {
-            console.error('Error saving area:', err);
-            setError(err.message || 'Erro ao salvar área');
-        }
-    };
-
-    const handleToggleActive = async (area) => {
-        try {
-            const { error } = await supabase
-                .from('areas')
-                .update({ is_active: !area.is_active })
-                .eq('id', area.id);
-
-            if (error) throw error;
-            await fetchData();
-        } catch (err) {
-            console.error('Error toggling area status:', err);
-            setError('Erro ao alterar status da área');
-        }
-    };
-
-    const handleDelete = async (area) => {
-        if (!confirm(`Excluir área "${area.name}"?`)) return;
-
-        try {
-            const { error } = await supabase
-                .from('areas')
-                .delete()
-                .eq('id', area.id);
-
-            if (error) throw error;
-            await fetchData();
-            setSuccess('Área excluída');
-        } catch (err) {
-            console.error('Error deleting area:', err);
-            setError('Erro ao excluir área. Verifique se não há tarefas vinculadas.');
-        }
-    };
-
-    const filteredAreas = areas.filter(area => {
-        const matchesSearch = area.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesType = filterType === 'all' || area.type === filterType;
-        return matchesSearch && matchesType;
-    });
-
-    const getTypeInfo = (type) => typeOptions.find(t => t.value === type) || typeOptions[2];
-    const getFrequencyLabel = (freq) => frequencyOptions.find(f => f.value === freq)?.label || freq;
-
-    const getTypeColor = (type) => {
-        const colors = {
-            room: 'bg-blue-100 text-blue-700',
-            bathroom: 'bg-cyan-100 text-cyan-700',
-            common: 'bg-green-100 text-green-700',
-            service: 'bg-orange-100 text-orange-700',
-            external: 'bg-emerald-100 text-emerald-700',
-        };
-        return colors[type] || colors.common;
-    };
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center min-h-96">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-            </div>
-        );
+      if (error) throw error;
+      setAreas(data || []);
+    } catch (err) {
+      console.error('Error fetching areas:', err);
+      setMessage({ type: 'error', text: 'Erro ao carregar áreas' });
+    } finally {
+      setLoading(false);
     }
+  };
 
+  const handleAddArea = () => {
+    setSelectedArea(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditArea = (area) => {
+    setSelectedArea(area);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteArea = (area) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Área',
+      message: `Tem certeza que deseja excluir "${area.name}"? Esta ação não pode ser desfeita.`,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          const { error } = await supabase
+            .from('areas')
+            .delete()
+            .eq('id', area.id);
+
+          if (error) throw error;
+
+          setMessage({ type: 'success', text: 'Área excluída com sucesso!' });
+          fetchAreas();
+          setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, loading: false });
+        } catch (err) {
+          console.error('Error deleting area:', err);
+          setMessage({ type: 'error', text: 'Erro ao excluir área' });
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+      loading: false,
+    });
+  };
+
+  const handleModalSuccess = () => {
+    setMessage({ type: 'success', text: selectedArea ? 'Área atualizada!' : 'Área criada!' });
+    fetchAreas();
+    setIsModalOpen(false);
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  const filteredAreas = areas.filter(area => {
+    const matchesSearch = area.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      area.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = filterType === 'all' || area.type === filterType;
+    return matchesSearch && matchesType;
+  });
+
+  const getAreaTypeInfo = (type) => AREA_TYPES[type] || AREA_TYPES.bedroom;
+
+  if (loading) {
     return (
-        <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <MapPin className="text-emerald-600" />
-                        Áreas do Hostel
-                    </h1>
-                    <p className="text-gray-600">Gerencie as áreas e locais do hostel</p>
-                </div>
-                {canCreate('areas') && (
-                    <button
-                        onClick={() => handleOpenModal()}
-                        className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
-                    >
-                        <Plus size={20} />
-                        Nova Área
-                    </button>
-                )}
-            </div>
-
-            {error && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-                    {error}
-                </div>
-            )}
-
-            {success && (
-                <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
-                    {success}
-                </div>
-            )}
-
-            {/* Filters */}
-            <div className="flex flex-wrap gap-4 mb-6">
-                <div className="flex-1 min-w-64">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                        <input
-                            type="text"
-                            placeholder="Buscar áreas..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                        />
-                    </div>
-                </div>
-                <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                >
-                    <option value="all">Todos os Tipos</option>
-                    {typeOptions.map(t => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Areas Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredAreas.map(area => {
-                    const typeInfo = getTypeInfo(area.type);
-                    const TypeIcon = typeInfo.icon;
-
-                    return (
-                        <div
-                            key={area.id}
-                            className={`bg-white rounded-lg shadow p-4 ${!area.is_active ? 'opacity-60' : ''}`}
-                        >
-                            <div className="flex items-start justify-between mb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-lg ${getTypeColor(area.type)}`}>
-                                        <TypeIcon size={20} />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold text-gray-900">{area.name}</h3>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${getTypeColor(area.type)}`}>
-                                            {typeInfo.label}
-                                        </span>
-                                    </div>
-                                </div>
-                                {!area.is_active && (
-                                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                                        Inativa
-                                    </span>
-                                )}
-                            </div>
-
-                            <div className="space-y-1 text-sm text-gray-600 mb-4">
-                                {area.floor && (
-                                    <p>Andar: {area.floor}</p>
-                                )}
-                                <p>Limpeza: {getFrequencyLabel(area.cleaning_frequency)}</p>
-                            </div>
-
-                            <div className="flex justify-between items-center pt-3 border-t">
-                                <button
-                                    onClick={() => handleToggleActive(area)}
-                                    className={`text-xs px-3 py-1 rounded-full ${area.is_active
-                                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                        }`}
-                                >
-                                    {area.is_active ? 'Ativa' : 'Inativa'}
-                                </button>
-                                <div className="flex gap-2">
-                                    {canEdit('areas') && (
-                                        <button
-                                            onClick={() => handleOpenModal(area)}
-                                            className="p-2 text-gray-400 hover:text-emerald-600"
-                                        >
-                                            <Edit2 size={18} />
-                                        </button>
-                                    )}
-                                    {canDelete('areas') && (
-                                        <button
-                                            onClick={() => handleDelete(area)}
-                                            className="p-2 text-gray-400 hover:text-red-600"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {filteredAreas.length === 0 && (
-                <div className="text-center py-12 bg-white rounded-lg shadow">
-                    <MapPin className="mx-auto text-gray-300 mb-4" size={48} />
-                    <p className="text-gray-500">Nenhuma área encontrada</p>
-                </div>
-            )}
-
-            {/* Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-                        <div className="flex justify-between items-center p-6 border-b">
-                            <h2 className="text-xl font-semibold">
-                                {editingArea ? 'Editar Área' : 'Nova Área'}
-                            </h2>
-                            <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            {error && (
-                                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                                    {error}
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-                                <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                    placeholder="Ex: Cozinha, Banheiro Térreo, Quarto 101"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
-                                <select
-                                    value={formData.type}
-                                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                >
-                                    {typeOptions.map(t => (
-                                        <option key={t.value} value={t.value}>{t.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Andar</label>
-                                <input
-                                    type="text"
-                                    value={formData.floor}
-                                    onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                    placeholder="Ex: Térreo, 1º Andar, Subsolo"
-                                />
-                            </div>
-
-                            {formData.type === 'room' && rooms.length > 0 && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Vincular a Quarto</label>
-                                    <select
-                                        value={formData.room_id}
-                                        onChange={(e) => setFormData({ ...formData, room_id: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                    >
-                                        <option value="">Nenhum</option>
-                                        {rooms.map(r => (
-                                            <option key={r.id} value={r.id}>{r.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Frequência de Limpeza</label>
-                                <select
-                                    value={formData.cleaning_frequency}
-                                    onChange={(e) => setFormData({ ...formData, cleaning_frequency: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                >
-                                    {frequencyOptions.map(f => (
-                                        <option key={f.value} value={f.value}>{f.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="flex justify-end gap-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={handleCloseModal}
-                                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                                >
-                                    {editingArea ? 'Salvar' : 'Criar Área'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+      </div>
     );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-100 rounded-lg">
+            <MapPin size={24} className="text-emerald-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Áreas</h1>
+            <p className="text-gray-500">Gerencie as áreas e checklists do hostel</p>
+          </div>
+        </div>
+        <button
+          onClick={handleAddArea}
+          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+        >
+          <Plus size={18} />
+          Nova Área
+        </button>
+      </div>
+
+      {/* Feedback Message */}
+      {message && (
+        <div className={`p-4 rounded-lg ${
+          message.type === 'success'
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            : 'bg-red-50 text-red-700 border border-red-200'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar áreas..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          />
+        </div>
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+        >
+          <option value="all">Todos os tipos</option>
+          {Object.entries(AREA_TYPES).map(([key, { label }]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Areas Grid */}
+      {filteredAreas.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+          <MapPin size={48} className="mx-auto text-gray-300 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma área encontrada</h3>
+          <p className="text-gray-500 mb-4">
+            {searchTerm || filterType !== 'all'
+              ? 'Tente ajustar os filtros de busca'
+              : 'Comece cadastrando as áreas do seu hostel'}
+          </p>
+          {!searchTerm && filterType === 'all' && (
+            <button
+              onClick={handleAddArea}
+              className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+            >
+              <Plus size={18} />
+              Cadastrar primeira área
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredAreas.map((area) => {
+            const typeInfo = getAreaTypeInfo(area.type);
+            const IconComponent = typeInfo.icon;
+            const statusInfo = STATUS_LABELS[area.status] || STATUS_LABELS.active;
+            const checklistCount = area.area_checklist_items?.[0]?.count || 0;
+
+            return (
+              <div
+                key={area.id}
+                className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+              >
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`p-2 rounded-lg ${typeInfo.color}`}>
+                      <IconComponent size={20} />
+                    </div>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusInfo.color}`}>
+                      {statusInfo.label}
+                    </span>
+                  </div>
+
+                  <h3 className="font-semibold text-gray-900 mb-1">{area.name}</h3>
+                  <p className="text-sm text-gray-500 mb-3">{typeInfo.label}</p>
+
+                  {area.description && (
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{area.description}</p>
+                  )}
+
+                  <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                    {area.location && (
+                      <span className="flex items-center gap-1">
+                        <MapPin size={14} />
+                        {area.location}
+                      </span>
+                    )}
+                    {area.capacity && (
+                      <span>{area.capacity} camas</span>
+                    )}
+                    {area.cleaning_frequency && (
+                      <span>Limpeza: {FREQUENCY_LABELS[area.cleaning_frequency] || area.cleaning_frequency}</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                      <CheckSquare size={14} />
+                      <span>{checklistCount} itens no checklist</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleEditArea(area)}
+                        className="p-2 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                        title="Editar área"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteArea(area)}
+                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Excluir área"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Summary */}
+      {areas.length > 0 && (
+        <div className="bg-gray-50 rounded-lg p-4">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <span className="text-gray-600">
+              <strong>{areas.length}</strong> áreas cadastradas
+            </span>
+            <span className="text-gray-400">|</span>
+            {Object.entries(AREA_TYPES).map(([key, { label }]) => {
+              const count = areas.filter(a => a.type === key).length;
+              if (count === 0) return null;
+              return (
+                <span key={key} className="text-gray-600">
+                  <strong>{count}</strong> {label.toLowerCase()}{count > 1 ? 's' : ''}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Area Modal */}
+      <AreaModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleModalSuccess}
+        area={selectedArea}
+      />
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, loading: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        confirmButtonColor="red"
+        loading={confirmModal.loading}
+      />
+    </div>
+  );
 };
 
 export default Areas;
