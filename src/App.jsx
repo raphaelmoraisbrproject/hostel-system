@@ -15,6 +15,7 @@ import Guests from './pages/Guests';
 import Finance from './pages/Finance';
 import Organization from './pages/Organization';
 import Areas from './pages/Areas';
+import Tasks from './pages/Tasks';
 import './i18n';
 
 function App() {
@@ -65,6 +66,11 @@ function App() {
           <Route path="/areas" element={
             <ProtectedRoute>
               <Layout><Areas /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/tasks" element={
+            <ProtectedRoute>
+              <Layout><Tasks /></Layout>
             </ProtectedRoute>
           } />
         </Routes>

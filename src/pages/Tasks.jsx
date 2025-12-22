@@ -68,7 +68,8 @@ const Tasks = () => {
                     .select(`
                         *,
                         assigned_user:profiles!tasks_assigned_to_fkey(id, full_name),
-                        area:areas(id, name)
+                        area:areas(id, name, rooms(name, room_number, type)),
+                        bed:beds(id, bed_number)
                     `)
                     .order('due_date', { ascending: true }),
                 supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
@@ -363,6 +364,7 @@ const Tasks = () => {
                                             <span className="flex items-center gap-1">
                                                 <MapPin size={14} />
                                                 {task.area.name}
+                                                {task.bed && ` - Cama ${task.bed.bed_number}`}
                                             </span>
                                         )}
                                         <span className="flex items-center gap-1">

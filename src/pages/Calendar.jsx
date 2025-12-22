@@ -1520,6 +1520,28 @@ const Calendar = () => {
         }
       }
 
+      // 4. Auto-create task on checkout
+      const previousStatus = selectedBooking?.status;
+      const newStatus = formData.status;
+
+      if (newStatus === 'Checked-out' && previousStatus !== 'Checked-out') {
+        // Find area linked to this room
+        const { data: areaData } = await supabase
+          .from('areas')
+          .select('id')
+          .eq('room_id', targetRoomId)
+          .single();
+
+        if (areaData) {
+          // Create checkout task
+          await supabase.rpc('create_checkout_task', {
+            p_booking_id: currentBookingId,
+            p_area_id: areaData.id,
+            p_bed_id: targetBedId
+          });
+        }
+      }
+
       setIsModalOpen(false);
       fetchData();
 
