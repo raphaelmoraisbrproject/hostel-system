@@ -181,6 +181,35 @@ export const AuthProvider = ({ children }) => {
         return data;
     };
 
+    const updateEmail = async (newEmail) => {
+        const { error } = await supabase.auth.updateUser({
+            email: newEmail
+        });
+
+        if (error) throw error;
+    };
+
+    const updateUserProfile = async (fullName) => {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) throw new Error('User not authenticated');
+
+        // Update auth metadata
+        const { error: authError } = await supabase.auth.updateUser({
+            data: { full_name: fullName }
+        });
+
+        if (authError) throw authError;
+
+        // Update profiles table
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .update({ full_name: fullName })
+            .eq('id', user.id);
+
+        if (profileError) throw profileError;
+    };
+
     const value = {
         signUp: (data) => supabase.auth.signUp(data),
         signIn: (data) => supabase.auth.signInWithPassword(data),
@@ -190,6 +219,8 @@ export const AuthProvider = ({ children }) => {
         signUpWithInvite,
         resetPassword,
         updatePassword,
+        updateEmail,
+        updateUserProfile,
         getInvites,
         cancelInvite,
         deleteUser,

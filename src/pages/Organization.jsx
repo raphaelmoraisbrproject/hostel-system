@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, DollarSign, Check, Globe, Users, UserPlus, Copy, Trash2, Clock } from 'lucide-react';
+import { Building2, DollarSign, Check, Globe, Users, UserPlus, Copy, Trash2, Clock, User, Mail, Lock, Edit2, X } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { CURRENCIES } from '../constants/currencies';
@@ -11,7 +11,7 @@ import ConfirmModal from '../components/ConfirmModal';
 const Organization = () => {
   const { currency, updateCurrency, loading } = useSettings();
   const { formatCurrency } = useCurrency();
-  const { user, getInvites, cancelInvite, deleteUser } = useAuth();
+  const { user, getInvites, cancelInvite, deleteUser, updateEmail, updatePassword, updateUserProfile } = useAuth();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -27,6 +27,15 @@ const Organization = () => {
     onConfirm: () => {},
     loading: false,
   });
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [profileFormData, setProfileFormData] = useState({
+    fullName: '',
+    email: '',
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [profileFormLoading, setProfileFormLoading] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -40,12 +49,20 @@ const Organization = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, full_name, email')
         .eq('id', user?.id)
         .single();
 
       if (error) throw error;
       setUserProfile(data);
+      // Initialize form data with current values
+      setProfileFormData({
+        fullName: data.full_name || '',
+        email: data.email || '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
     } catch (err) {
       console.error('Error fetching user profile:', err);
     }
@@ -160,6 +177,72 @@ const Organization = () => {
     });
   };
 
+  const handleEditProfile = () => {
+    setIsEditProfileModalOpen(true);
+  };
+
+  const handleCloseProfileModal = () => {
+    setIsEditProfileModalOpen(false);
+    // Reset password fields
+    setProfileFormData((prev) => ({
+      ...prev,
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    }));
+  };
+
+  const handleProfileFormChange = (field, value) => {
+    setProfileFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setProfileFormLoading(true);
+    setMessage(null);
+
+    try {
+      let hasChanges = false;
+
+      // Update full name if changed
+      if (profileFormData.fullName !== userProfile.full_name) {
+        await updateUserProfile(profileFormData.fullName);
+        hasChanges = true;
+      }
+
+      // Update email if changed
+      if (profileFormData.email !== userProfile.email) {
+        await updateEmail(profileFormData.email);
+        hasChanges = true;
+      }
+
+      // Update password if provided
+      if (profileFormData.newPassword) {
+        if (profileFormData.newPassword !== profileFormData.confirmPassword) {
+          throw new Error('As senhas não coincidem');
+        }
+        if (profileFormData.newPassword.length < 6) {
+          throw new Error('A senha deve ter pelo menos 6 caracteres');
+        }
+        await updatePassword(profileFormData.newPassword);
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
+        await fetchUserProfile();
+        handleCloseProfileModal();
+      } else {
+        setMessage({ type: 'error', text: 'Nenhuma alteração foi feita' });
+      }
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      setMessage({ type: 'error', text: err.message || 'Erro ao atualizar perfil' });
+    } finally {
+      setProfileFormLoading(false);
+    }
+  };
+
   const getRoleBadgeColor = (role) => {
     const colors = {
       admin: 'bg-purple-100 text-purple-800',
@@ -223,6 +306,61 @@ const Organization = () => {
         }`}>
           {message.type === 'success' ? <Check size={18} /> : null}
           {message.text}
+        </div>
+      )}
+
+      {/* Seção de Perfil do Usuário */}
+      {userProfile && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+            <User size={20} className="text-gray-600" />
+            <div>
+              <h2 className="font-semibold text-gray-900">Meu Perfil</h2>
+              <p className="text-sm text-gray-500">Gerencie suas informações pessoais</p>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {/* Avatar */}
+                <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <span className="text-emerald-600 font-bold text-2xl">
+                    {userProfile.full_name?.charAt(0)?.toUpperCase() || '?'}
+                  </span>
+                </div>
+
+                {/* User Info */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {userProfile.full_name || 'Usuário'}
+                  </h3>
+                  <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                    <Mail size={14} />
+                    <span>{userProfile.email}</span>
+                  </div>
+                  <div className="mt-2">
+                    <span
+                      className={`px-3 py-1 text-xs font-semibold rounded-full ${getRoleBadgeColor(
+                        userProfile.role
+                      )}`}
+                    >
+                      {getRoleLabel(userProfile.role)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Button */}
+              <button
+                onClick={handleEditProfile}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+              >
+                <Edit2 size={18} />
+                Editar Perfil
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -473,6 +611,165 @@ const Organization = () => {
         confirmButtonColor="red"
         loading={confirmModal.loading}
       />
+
+      {/* Modal de Edição de Perfil */}
+      {isEditProfileModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100 sticky top-0 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <User size={20} className="text-emerald-600" />
+                </div>
+                <h2 className="text-xl font-semibold text-gray-900">Editar Perfil</h2>
+              </div>
+              <button
+                onClick={handleCloseProfileModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={profileFormLoading}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="p-6">
+              <div className="space-y-4">
+                {/* Full Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nome Completo *
+                  </label>
+                  <div className="relative">
+                    <User size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={profileFormData.fullName}
+                      onChange={(e) => handleProfileFormChange('fullName', e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="Seu nome completo"
+                      required
+                      disabled={profileFormLoading}
+                    />
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email *
+                  </label>
+                  <div className="relative">
+                    <Mail size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="email"
+                      value={profileFormData.email}
+                      onChange={(e) => handleProfileFormChange('email', e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      placeholder="seu@email.com"
+                      required
+                      disabled={profileFormLoading}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Você receberá um email de confirmação se alterar o endereço
+                  </p>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-gray-200 my-6"></div>
+
+                {/* Change Password Section */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Lock size={16} />
+                    Alterar Senha (Opcional)
+                  </h3>
+
+                  <div className="space-y-3">
+                    {/* New Password */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nova Senha
+                      </label>
+                      <div className="relative">
+                        <Lock size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="password"
+                          value={profileFormData.newPassword}
+                          onChange={(e) => handleProfileFormChange('newPassword', e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                          placeholder="Mínimo 6 caracteres"
+                          disabled={profileFormLoading}
+                          minLength={6}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Confirm Password */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Confirmar Nova Senha
+                      </label>
+                      <div className="relative">
+                        <Lock size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="password"
+                          value={profileFormData.confirmPassword}
+                          onChange={(e) => handleProfileFormChange('confirmPassword', e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                          placeholder="Confirme a nova senha"
+                          disabled={profileFormLoading}
+                          minLength={6}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Deixe em branco se não quiser alterar a senha
+                  </p>
+                </div>
+
+                {/* Info Box */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-700">
+                    Suas alterações serão aplicadas imediatamente após salvar.
+                  </p>
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleCloseProfileModal}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={profileFormLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={profileFormLoading}
+                >
+                  {profileFormLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={18} />
+                      Salvar Alterações
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
