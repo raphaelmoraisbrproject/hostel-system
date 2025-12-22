@@ -67,7 +67,7 @@ const Tasks = () => {
                     .from('tasks')
                     .select(`
                         *,
-                        assigned_user:profiles(id, full_name),
+                        assigned_user:profiles!tasks_assigned_to_fkey(id, full_name),
                         area:areas(id, name, room_id),
                         bed:beds(id, bed_number)
                     `)
