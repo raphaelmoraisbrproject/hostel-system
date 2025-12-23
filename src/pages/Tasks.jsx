@@ -4,8 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from '../contexts/PermissionsContext';
 import {
     Plus, Search, Filter, Calendar, Clock, User, MapPin,
-    CheckCircle, Circle, AlertCircle, X, Edit2, Trash2
+    CheckCircle, Circle, AlertCircle, X, Edit2, Trash2,
+    LayoutList, LayoutGrid
 } from 'lucide-react';
+import KanbanBoard from '../components/tasks/KanbanBoard';
+import { TASK_CATEGORIES } from '../constants/taskCategories';
 
 const Tasks = () => {
     const { profile } = useAuth();
@@ -22,6 +25,9 @@ const Tasks = () => {
     const [editingTask, setEditingTask] = useState(null);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [viewMode, setViewMode] = useState(() => {
+        return localStorage.getItem('tasksViewMode') || 'list';
+    });
 
     const [formData, setFormData] = useState({
         title: '',
@@ -33,7 +39,13 @@ const Tasks = () => {
         due_date: new Date().toISOString().split('T')[0],
         due_time: '',
         checklist_items: [],
+        category: 'geral',
     });
+
+    // Persist view mode preference
+    useEffect(() => {
+        localStorage.setItem('tasksViewMode', viewMode);
+    }, [viewMode]);
 
     const statusOptions = [
         { value: 'pending', label: 'Pendente', color: 'bg-yellow-100 text-yellow-800' },
@@ -107,7 +119,7 @@ const Tasks = () => {
         }
     };
 
-    const handleOpenModal = (task = null) => {
+    const handleOpenModal = (task = null, defaultCategory = null) => {
         if (task) {
             setEditingTask(task);
             setFormData({
@@ -120,6 +132,7 @@ const Tasks = () => {
                 due_date: task.due_date,
                 due_time: task.due_time || '',
                 checklist_items: task.checklist_items || [],
+                category: task.category || 'geral',
             });
         } else {
             setEditingTask(null);
@@ -133,6 +146,7 @@ const Tasks = () => {
                 due_date: new Date().toISOString().split('T')[0],
                 due_time: '',
                 checklist_items: [],
+                category: defaultCategory || 'geral',
             });
         }
         setError('');
@@ -186,6 +200,7 @@ const Tasks = () => {
                 due_date: ['daily', 'checkout'].includes(formData.type) ? null : formData.due_date,
                 due_time: ['daily', 'checkout'].includes(formData.type) ? null : (formData.due_time || null),
                 checklist_items: formData.checklist_items,
+                category: formData.category || 'geral',
             };
 
             if (editingTask) {
@@ -329,15 +344,42 @@ const Tasks = () => {
                     <h1 className="text-2xl font-bold text-gray-900">Todas as Tarefas</h1>
                     <p className="text-gray-600">Gerencie as tarefas de todos os colaboradores</p>
                 </div>
-                {canCreate('tasks') && (
-                    <button
-                        onClick={() => handleOpenModal()}
-                        className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
-                    >
-                        <Plus size={20} />
-                        Nova Tarefa
-                    </button>
-                )}
+                <div className="flex items-center gap-4">
+                    {/* View Toggle */}
+                    <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`p-2 rounded-lg transition-colors ${
+                                viewMode === 'list'
+                                    ? 'bg-white text-emerald-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                            title="Visualizacao em lista"
+                        >
+                            <LayoutList size={20} />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('kanban')}
+                            className={`p-2 rounded-lg transition-colors ${
+                                viewMode === 'kanban'
+                                    ? 'bg-white text-emerald-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                            title="Visualizacao Kanban"
+                        >
+                            <LayoutGrid size={20} />
+                        </button>
+                    </div>
+                    {canCreate('tasks') && (
+                        <button
+                            onClick={() => handleOpenModal()}
+                            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                        >
+                            <Plus size={20} />
+                            Nova Tarefa
+                        </button>
+                    )}
+                </div>
             </div>
 
             {error && (
@@ -388,9 +430,10 @@ const Tasks = () => {
                 </select>
             </div>
 
-            {/* Tasks List */}
-            <div className="space-y-4">
-                {filteredTasks.map(task => {
+            {/* Tasks View - List or Kanban */}
+            {viewMode === 'list' ? (
+                <div className="space-y-4">
+                    {filteredTasks.map(task => {
                     const statusInfo = getStatusInfo(task.status);
                     const priorityInfo = getPriorityInfo(task.priority);
                     const isOverdue = task.due_date && !['daily', 'checkout'].includes(task.type) && new Date(task.due_date) < new Date() && task.status !== 'completed';
@@ -519,7 +562,15 @@ const Tasks = () => {
                         <p className="text-gray-500">Nenhuma tarefa encontrada</p>
                     </div>
                 )}
-            </div>
+                </div>
+            ) : (
+                <KanbanBoard
+                    tasks={tasks}
+                    onRefresh={fetchData}
+                    onAddTask={(category) => handleOpenModal(null, category)}
+                    onEditTask={(task) => handleOpenModal(task)}
+                />
+            )}
 
             {/* Modal */}
             {isModalOpen && (
@@ -575,6 +626,20 @@ const Tasks = () => {
                                         ))}
                                     </select>
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                                    <select
+                                        value={formData.category}
+                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                                    >
+                                        {Object.values(TASK_CATEGORIES).map(cat => (
+                                            <option key={cat.value} value={cat.value}>{cat.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
                                     <select
