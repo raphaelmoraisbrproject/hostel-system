@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
-    CheckCircle2, Circle, Clock, MapPin, Calendar, ChevronDown, ChevronUp,
+    CheckCircle2, Clock, MapPin, Calendar, ChevronDown, ChevronUp,
     AlertTriangle, Play, Check, Camera
 } from 'lucide-react';
 
@@ -248,15 +248,17 @@ const MyTasks = () => {
                             >
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-start gap-3">
-                                        {task.status === 'completed' ? (
-                                            <CheckCircle2 className="text-green-500 mt-1" size={22} />
-                                        ) : task.status === 'in_progress' ? (
-                                            <Play className="text-blue-500 mt-1" size={22} />
-                                        ) : (
-                                            <Circle className="text-gray-400 mt-1" size={22} />
-                                        )}
+                                        {/* Checkbox for quick completion */}
+                                        <input
+                                            type="checkbox"
+                                            checked={task.status === 'completed'}
+                                            onChange={() => task.status !== 'completed' && handleCompleteTask(task.id)}
+                                            disabled={task.status === 'completed'}
+                                            className="mt-1 w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
                                         <div>
-                                            <h3 className={`font-semibold ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'
+                                            <h3 className={`font-semibold transition-all ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-900'
                                                 }`}>
                                                 {task.title}
                                             </h3>
