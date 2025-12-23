@@ -1520,25 +1520,30 @@ const Calendar = () => {
         }
       }
 
-      // 4. Auto-create task on checkout
+      // 4. Auto-create task on checkout (if enabled for this area)
       const previousStatus = selectedBooking?.status;
       const newStatus = formData.status;
 
       if (newStatus === 'Checked-out' && previousStatus !== 'Checked-out') {
-        // Find area linked to this room
+        // Find area linked to this room and check if auto_checkout_task is enabled
         const { data: areaData } = await supabase
           .from('areas')
-          .select('id')
+          .select('id, auto_checkout_task')
           .eq('room_id', targetRoomId)
           .single();
 
-        if (areaData) {
-          // Create checkout task
-          await supabase.rpc('create_checkout_task', {
+        // Only create task if area exists and auto_checkout_task is enabled
+        if (areaData && areaData.auto_checkout_task !== false) {
+          // Create checkout task (function also checks the flag as failsafe)
+          const { data: taskResult } = await supabase.rpc('create_checkout_task', {
             p_booking_id: currentBookingId,
             p_area_id: areaData.id,
             p_bed_id: targetBedId
           });
+
+          if (taskResult) {
+            console.log('Checkout task created:', taskResult);
+          }
         }
       }
 
