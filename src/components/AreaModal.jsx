@@ -26,6 +26,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
     floor: '',
     status: 'active',
     description: '',
+    auto_checkout_task: true,
   });
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -72,6 +73,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
           floor: area.floor || '',
           status: area.is_active === false ? 'inactive' : 'active',
           description: '',
+          auto_checkout_task: area.auto_checkout_task !== false,
         });
       } else {
         resetForm();
@@ -87,6 +89,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
       floor: '',
       status: 'active',
       description: '',
+      auto_checkout_task: true,
     });
     setError('');
   };
@@ -141,6 +144,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
         floor: formData.floor || null,
         room_id: isRoomType ? formData.selectedRoomId : null,
         is_active: formData.status === 'active',
+        auto_checkout_task: isRoomType ? formData.auto_checkout_task : null,
       };
 
       if (area) {
@@ -304,6 +308,22 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
                 </select>
               </div>
             </div>
+
+            {/* Auto checkout task toggle - only for room type */}
+            {isRoomType && (
+              <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="auto_checkout_task"
+                  checked={formData.auto_checkout_task}
+                  onChange={(e) => setFormData({ ...formData, auto_checkout_task: e.target.checked })}
+                  className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <label htmlFor="auto_checkout_task" className="text-sm text-emerald-700 cursor-pointer">
+                  Criar tarefa de limpeza automaticamente no checkout
+                </label>
+              </div>
+            )}
 
             {/* Preview */}
             {!area && (

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Plus, Search, Building2, Bath, ChefHat, Sofa, Wrench, Trees, Edit2, Trash2, BedDouble } from 'lucide-react';
+import { MapPin, Plus, Search, Building2, Bath, ChefHat, Sofa, Wrench, Trees, Edit2, Trash2, BedDouble, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import AreaModal from '../components/AreaModal';
 import ConfirmModal from '../components/ConfirmModal';
@@ -47,7 +47,7 @@ const Areas = () => {
       const [areasRes, roomsRes] = await Promise.all([
         supabase
           .from('areas')
-          .select('*, rooms(name, room_number, capacity)')
+          .select('*, rooms(name, room_number, capacity), auto_checkout_task')
           .order('name'),
         supabase
           .from('rooms')
@@ -141,6 +141,28 @@ const Areas = () => {
     fetchData();
     setIsModalOpen(false);
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleToggleAutoTask = async (area) => {
+    try {
+      const newValue = area.auto_checkout_task === false ? true : false;
+      const { error } = await supabase
+        .from('areas')
+        .update({ auto_checkout_task: newValue })
+        .eq('id', area.id);
+
+      if (error) throw error;
+
+      setMessage({
+        type: 'success',
+        text: newValue ? 'Tarefa automática ativada' : 'Tarefa automática desativada'
+      });
+      fetchData();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error('Error toggling auto task:', err);
+      setMessage({ type: 'error', text: 'Erro ao atualizar configuração' });
+    }
   };
 
   const allAreas = getAllAreas();
@@ -286,6 +308,24 @@ const Areas = () => {
                       </span>
                     )}
                   </div>
+
+                  {/* Toggle for auto checkout task - only for room type areas */}
+                  {area.type === 'room' && !area.isVirtual && (
+                    <div className="flex items-center gap-2 mb-4 p-2 bg-gray-50 rounded-lg">
+                      <ClipboardCheck size={16} className="text-gray-400" />
+                      <label className="flex items-center gap-2 cursor-pointer flex-1">
+                        <input
+                          type="checkbox"
+                          checked={area.auto_checkout_task !== false}
+                          onChange={() => handleToggleAutoTask(area)}
+                          className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <span className="text-sm text-gray-600">
+                          Auto-criar tarefa no checkout
+                        </span>
+                      </label>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div className="text-sm text-gray-500">
