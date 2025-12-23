@@ -3,7 +3,7 @@ import { X, MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const AREA_TYPES = [
-  { value: 'bedroom', label: 'Quarto' },
+  { value: 'room', label: 'Quarto' },
   { value: 'bathroom', label: 'Banheiro' },
   { value: 'kitchen', label: 'Cozinha' },
   { value: 'common_area', label: 'Área Comum' },
@@ -20,7 +20,7 @@ const STATUS_OPTIONS = [
 
 const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
   const [formData, setFormData] = useState({
-    selectedType: 'bedroom',
+    selectedType: 'room',
     customName: '',
     selectedRoomId: '',
     floor: '',
@@ -33,7 +33,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
   const [error, setError] = useState('');
 
   const isCustomType = formData.selectedType === 'custom';
-  const isBedroomType = formData.selectedType === 'bedroom';
+  const isRoomType = formData.selectedType === 'room';
 
   useEffect(() => {
     if (isOpen) {
@@ -66,7 +66,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
         const isCustom = !predefinedType && !area.room_id;
 
         setFormData({
-          selectedType: area.room_id ? 'bedroom' : (isCustom ? 'custom' : area.type),
+          selectedType: area.room_id ? 'room' : (isCustom ? 'custom' : area.type),
           customName: isCustom ? area.name : '',
           selectedRoomId: area.room_id || '',
           floor: area.floor || '',
@@ -81,7 +81,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
 
   const resetForm = () => {
     setFormData({
-      selectedType: 'bedroom',
+      selectedType: 'room',
       customName: '',
       selectedRoomId: '',
       floor: '',
@@ -103,7 +103,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
       return formData.customName;
     }
 
-    if (isBedroomType && formData.selectedRoomId) {
+    if (isRoomType && formData.selectedRoomId) {
       const selectedRoom = rooms.find(r => r.id === formData.selectedRoomId);
       if (selectedRoom) {
         return `Quarto ${selectedRoom.room_number} - ${selectedRoom.name}`;
@@ -124,7 +124,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
       return;
     }
 
-    if (isBedroomType && !formData.selectedRoomId) {
+    if (isRoomType && !formData.selectedRoomId) {
       setError('Selecione um quarto');
       return;
     }
@@ -139,7 +139,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
         name: areaName,
         type: areaType,
         floor: formData.floor || null,
-        room_id: isBedroomType ? formData.selectedRoomId : null,
+        room_id: isRoomType ? formData.selectedRoomId : null,
         is_active: formData.status === 'active',
       };
 
@@ -225,7 +225,7 @@ const AreaModal = ({ isOpen, onClose, onSuccess, area }) => {
             </div>
 
             {/* Room selector - only shows when "Quarto" is selected */}
-            {isBedroomType && (
+            {isRoomType && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Selecione o Quarto *

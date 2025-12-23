@@ -13,6 +13,7 @@ const Tasks = () => {
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
     const [areas, setAreas] = useState([]);
+    const [rooms, setRooms] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -62,7 +63,7 @@ const Tasks = () => {
 
     const fetchData = async () => {
         try {
-            const [tasksRes, usersRes, areasRes] = await Promise.all([
+            const [tasksRes, usersRes, areasRes, roomsRes] = await Promise.all([
                 supabase
                     .from('tasks')
                     .select(`
@@ -73,7 +74,8 @@ const Tasks = () => {
                     `)
                     .order('due_date', { ascending: true }),
                 supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
-                supabase.from('areas').select('id, name, type').eq('is_active', true),
+                supabase.from('areas').select('id, name, type, room_id').eq('is_active', true),
+                supabase.from('rooms').select('id, name, room_number, type').eq('is_active', true).order('room_number'),
             ]);
 
             if (tasksRes.error) {
@@ -88,10 +90,15 @@ const Tasks = () => {
                 console.error('Areas query error:', areasRes.error);
                 throw areasRes.error;
             }
+            if (roomsRes.error) {
+                console.error('Rooms query error:', roomsRes.error);
+                throw roomsRes.error;
+            }
 
             setTasks(tasksRes.data || []);
             setUsers(usersRes.data || []);
             setAreas(areasRes.data || []);
+            setRooms(roomsRes.data || []);
         } catch (err) {
             console.error('Error fetching data:', err);
             setError('Erro ao carregar dados');
@@ -144,15 +151,40 @@ const Tasks = () => {
         setError('');
 
         try {
+            let areaId = formData.area_id || null;
+
+            // If a virtual area (room) was selected, create a real area first
+            if (areaId && areaId.startsWith('room-')) {
+                const roomId = areaId.replace('room-', '');
+                const selectedRoom = rooms.find(r => r.id === roomId);
+
+                if (selectedRoom) {
+                    // Create a real area for this room
+                    const { data: newArea, error: areaError } = await supabase
+                        .from('areas')
+                        .insert({
+                            name: `Quarto ${selectedRoom.room_number} - ${selectedRoom.name}`,
+                            type: 'room',
+                            room_id: roomId,
+                            is_active: true,
+                        })
+                        .select('id')
+                        .single();
+
+                    if (areaError) throw areaError;
+                    areaId = newArea.id;
+                }
+            }
+
             const taskData = {
                 title: formData.title,
                 description: formData.description || null,
-                area_id: formData.area_id || null,
+                area_id: areaId,
                 type: formData.type,
                 priority: formData.priority,
                 assigned_to: formData.assigned_to || null,
-                due_date: formData.type === 'daily' ? null : formData.due_date,
-                due_time: formData.type === 'daily' ? null : (formData.due_time || null),
+                due_date: ['daily', 'checkout'].includes(formData.type) ? null : formData.due_date,
+                due_time: ['daily', 'checkout'].includes(formData.type) ? null : (formData.due_time || null),
                 checklist_items: formData.checklist_items,
             };
 
@@ -263,6 +295,25 @@ const Tasks = () => {
     const getStatusInfo = (status) => statusOptions.find(s => s.value === status) || statusOptions[0];
     const getPriorityInfo = (priority) => priorityOptions.find(p => p.value === priority) || priorityOptions[1];
 
+    // Combine registered areas with rooms that don't have areas
+    const getAllAreas = () => {
+        const areasWithRoomIds = new Set(areas.filter(a => a.room_id).map(a => a.room_id));
+
+        // Rooms without corresponding areas (virtual areas)
+        const virtualAreas = rooms
+            .filter(room => !areasWithRoomIds.has(room.id))
+            .map(room => ({
+                id: `room-${room.id}`,
+                name: `Quarto ${room.room_number} - ${room.name}`,
+                type: 'room',
+                isVirtual: true,
+            }));
+
+        return [...areas, ...virtualAreas];
+    };
+
+    const allAreas = getAllAreas();
+
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-96">
@@ -342,7 +393,7 @@ const Tasks = () => {
                 {filteredTasks.map(task => {
                     const statusInfo = getStatusInfo(task.status);
                     const priorityInfo = getPriorityInfo(task.priority);
-                    const isOverdue = task.due_date && task.type !== 'daily' && new Date(task.due_date) < new Date() && task.status !== 'completed';
+                    const isOverdue = task.due_date && !['daily', 'checkout'].includes(task.type) && new Date(task.due_date) < new Date() && task.status !== 'completed';
 
                     return (
                         <div
@@ -380,6 +431,11 @@ const Tasks = () => {
                                             <span className="flex items-center gap-1 text-blue-600">
                                                 <Calendar size={14} />
                                                 Recorrente diária
+                                            </span>
+                                        ) : task.type === 'checkout' ? (
+                                            <span className="flex items-center gap-1 text-orange-600">
+                                                <Calendar size={14} />
+                                                Gerada no check-out
                                             </span>
                                         ) : task.due_date && (
                                             <>
@@ -521,15 +577,17 @@ const Tasks = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Área</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Área / Quarto</label>
                                 <select
                                     value={formData.area_id}
                                     onChange={(e) => setFormData({ ...formData, area_id: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                                 >
                                     <option value="">Selecione uma área</option>
-                                    {areas.map(a => (
-                                        <option key={a.id} value={a.id}>{a.name}</option>
+                                    {allAreas.map(a => (
+                                        <option key={a.id} value={a.id}>
+                                            {a.name}{a.isVirtual ? ' (Quarto)' : ''}
+                                        </option>
                                     ))}
                                 </select>
                             </div>
@@ -548,8 +606,8 @@ const Tasks = () => {
                                 </select>
                             </div>
 
-                            {/* Date/Time - Hidden for daily recurring tasks */}
-                            {formData.type !== 'daily' ? (
+                            {/* Date/Time - Hidden for daily and checkout tasks */}
+                            {!['daily', 'checkout'].includes(formData.type) ? (
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
@@ -571,10 +629,16 @@ const Tasks = () => {
                                         />
                                     </div>
                                 </div>
-                            ) : (
+                            ) : formData.type === 'daily' ? (
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                     <p className="text-sm text-blue-700">
                                         Tarefas diárias são recorrentes e aparecem todos os dias automaticamente.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                    <p className="text-sm text-orange-700">
+                                        Tarefas de check-out são geradas automaticamente quando um hóspede faz check-out.
                                     </p>
                                 </div>
                             )}

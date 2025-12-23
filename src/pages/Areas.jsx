@@ -5,7 +5,7 @@ import AreaModal from '../components/AreaModal';
 import ConfirmModal from '../components/ConfirmModal';
 
 const AREA_TYPES = {
-  bedroom: { label: 'Quarto', icon: Building2, color: 'bg-blue-100 text-blue-600' },
+  room: { label: 'Quarto', icon: Building2, color: 'bg-blue-100 text-blue-600' },
   bathroom: { label: 'Banheiro', icon: Bath, color: 'bg-cyan-100 text-cyan-600' },
   kitchen: { label: 'Cozinha', icon: ChefHat, color: 'bg-orange-100 text-orange-600' },
   common_area: { label: 'Área Comum', icon: Sofa, color: 'bg-purple-100 text-purple-600' },
@@ -80,7 +80,7 @@ const Areas = () => {
         id: `room-${room.id}`,
         room_id: room.id,
         name: `Quarto ${room.room_number} - ${room.name}`,
-        type: 'bedroom',
+        type: 'room',
         is_active: room.is_active,
         capacity: room.capacity,
         isVirtual: true, // Flag to indicate this is auto-generated from room
@@ -151,7 +151,7 @@ const Areas = () => {
     return matchesSearch && matchesType;
   });
 
-  const getAreaTypeInfo = (type) => AREA_TYPES[type] || AREA_TYPES.bedroom;
+  const getAreaTypeInfo = (type) => AREA_TYPES[type] || AREA_TYPES.room;
 
   if (loading) {
     return (
