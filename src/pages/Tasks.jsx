@@ -26,7 +26,7 @@ const Tasks = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [viewMode, setViewMode] = useState(() => {
-        return localStorage.getItem('tasksViewMode') || 'list';
+        return localStorage.getItem('tasksViewMode') || 'kanban';
     });
 
     const [formData, setFormData] = useState({
